@@ -1,0 +1,45 @@
+# Core Data Science
+numpy
+pandas
+scikit-learn
+scipy
+
+# Stock Data
+yfinance
+pandas-datareader
+
+# Deep Learning (LSTM) - Using CPU version to save memory
+tensorflow-cpu
+keras
+
+# Time Series Forecasting
+prophet
+statsmodels
+pmdarima
+
+# Technical Analysis
+ta
+pandas-ta
+
+# Computer Vision
+opencv-python-headless
+Pillow
+torch --index-url https://download.pytorch.org/whl/cpu
+torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# Web Framework
+fastapi
+uvicorn
+python-multipart
+
+# Visualization
+plotly
+matplotlib
+seaborn
+
+# Utilities
+python-dotenv
+requests
+pydantic
+joblib
+tqdm
