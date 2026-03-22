@@ -227,24 +227,31 @@ function qs(s){document.getElementById('sym').value=s;go();}
 function dsp(id,v){var e=document.getElementById(id);if(e)e.style.display=v;}
 function setBtn(on){var b=document.getElementById('gbtn');b.disabled=!on;b.textContent=on?'▶ Analyze Live':'Loading...';}
 
-function go(){
+function go(retryCount = 0){
   var raw=document.getElementById('sym').value.trim();
   if(!raw)return;
   var tk=res(raw);
   dsp('d0','none');dsp('d-load','flex');dsp('d-main','none');dsp('d-err','none');
   dsp('ta0','block');dsp('ta-main','none');dsp('fc0','block');dsp('fc-main','none');
   setBtn(false);
-  document.getElementById('lmsg').textContent='Fetching AI analysis for '+raw.toUpperCase()+'...';
+  document.getElementById('lmsg').textContent=(retryCount > 0 ? 'Retrying (Attempt '+retryCount+')...' : 'Fetching AI analysis for '+raw.toUpperCase()+'...');
   
   const BACKEND_URL = 'https://ai-stock-assistant-2.onrender.com';
-  Promise.all([
-    fetch(BACKEND_URL + '/api/analysis/' + tk).then(r => r.json()),
-    fetch(BACKEND_URL + '/api/forecast/' + tk).then(r => r.json())
-  ])
-  .then(function(results) {
-    if(results[0].detail) throw new Error(results[0].detail);
-    if(results[1].detail) throw new Error(results[1].detail);
-    parseBackendData(results[0], results[1], raw.toUpperCase());
+  
+  fetch(BACKEND_URL + '/api/combined/' + tk)
+  .then(r => {
+    if (r.status === 429 || r.status === 500) {
+       if (retryCount < 2) {
+         setTimeout(() => go(retryCount + 1), 3000);
+         return null;
+       }
+    }
+    return r.json();
+  })
+  .then(function(res) {
+    if (!res) return; // Handled by retry
+    if(res.detail) throw new Error(res.detail);
+    parseCombinedData(res, raw.toUpperCase());
   })
   .catch(function(e) {
     dsp('d-load','none');
@@ -253,9 +260,12 @@ function go(){
   });
 }
 
-function parseBackendData(analysis, forecast, disp) {
+function parseCombinedData(res, disp) {
+  var analysis = res.analysis;
+  var forecast = res.forecast;
+  var info = res.info || {};
   var c = analysis.chart_data;
-  var info = analysis.info || {};
+  
   var lp = info.regularMarketPrice || c.close[c.close.length-1];
   var pc = info.previousClose || info.chartPreviousClose || c.close[c.close.length-2] || lp;
   
@@ -263,7 +273,7 @@ function parseBackendData(analysis, forecast, disp) {
     dates: c.dates, closes: c.close, highs: c.close, lows: c.close,
     lp: lp, pc: pc,
     chg: +(lp-pc).toFixed(2), chgp: +((lp-pc)/pc*100).toFixed(2),
-    cur: info.currency || 'INR', name: info.longName || info.shortName || disp,
+    cur: info.currency || 'INR', name: info.name || disp,
     exch: info.exchangeName || 'NSE', h52: info.fiftyTwoWeekHigh, l52: info.fiftyTwoWeekLow, sym: disp,
     rsi: c.rsi, macd: { line: c.macd_line, signal: c.macd_signal, hist: c.histogram }, bb: { upper: c.bb_upper, lower: c.bb_lower },
     s50: c.sma_50, s200: c.sma_200, atr: +(lp * 0.015).toFixed(2),

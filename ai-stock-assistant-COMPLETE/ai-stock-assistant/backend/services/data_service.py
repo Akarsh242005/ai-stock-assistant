@@ -10,6 +10,8 @@ Supports NSE (Indian) and global markets.
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import time
+from functools import lru_cache
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
@@ -31,6 +33,11 @@ TICKER_MAP = {
 }
 
 
+# ─── Simple In-Memory Cache (TTL) ─────────────────────────
+CACHE_DATA: Dict[str, Any] = {}
+CACHE_INFO: Dict[str, Any] = {}
+CACHE_TTL = 300  # 5 minutes
+
 def resolve_ticker(symbol: str) -> str:
     """Convert friendly name to yfinance ticker symbol."""
     upper = symbol.upper()
@@ -42,18 +49,16 @@ def fetch_stock_data(
     period: str = "2y",
     interval: str = "1d",
 ) -> pd.DataFrame:
-    """
-    Fetch OHLCV data from Yahoo Finance.
-
-    Args:
-        symbol:   Stock ticker or friendly name (e.g. 'NIFTY', 'RELIANCE')
-        period:   yfinance period string ('1y', '2y', '5y', 'max')
-        interval: Data interval ('1d', '1h', '5m')
-
-    Returns:
-        DataFrame with columns: Open, High, Low, Close, Volume
-    """
+    """Fetch OHLCV data from Yahoo Finance with caching."""
     ticker = resolve_ticker(symbol)
+    cache_key = f"{ticker}_{period}_{interval}"
+    now = time.time()
+
+    if cache_key in CACHE_DATA:
+        entry = CACHE_DATA[cache_key]
+        if now - entry["time"] < CACHE_TTL:
+            return entry["df"]
+
     df = yf.download(ticker, period=period, interval=interval, progress=False)
 
     if df.empty:
@@ -65,24 +70,39 @@ def fetch_stock_data(
 
     df.index = pd.to_datetime(df.index)
     df.dropna(inplace=True)
+    
+    # Save to cache
+    CACHE_DATA[cache_key] = {"df": df, "time": now}
     return df
 
 
 def fetch_stock_info(symbol: str) -> Dict[str, Any]:
-    """Fetch company metadata / stock info."""
+    """Fetch company metadata / stock info with caching."""
     ticker = resolve_ticker(symbol)
-    info = yf.Ticker(ticker).info
-    return {
-        "name":        info.get("longName", symbol),
-        "sector":      info.get("sector", "N/A"),
-        "industry":    info.get("industry", "N/A"),
-        "market_cap":  info.get("marketCap", None),
-        "currency":    info.get("currency", "INR"),
-        "description": info.get("longBusinessSummary", "")[:300],
-        "52w_high":    info.get("fiftyTwoWeekHigh", None),
-        "52w_low":     info.get("fiftyTwoWeekLow", None),
-        "pe_ratio":    info.get("trailingPE", None),
+    now = time.time()
+
+    if ticker in CACHE_INFO:
+        entry = CACHE_INFO[ticker]
+        if now - entry["time"] < CACHE_TTL:
+            return entry["info"]
+
+    t = yf.Ticker(ticker)
+    info_raw = t.info
+    info = {
+        "name":        info_raw.get("longName", symbol),
+        "sector":      info_raw.get("sector", "N/A"),
+        "industry":    info_raw.get("industry", "N/A"),
+        "market_cap":  info_raw.get("marketCap", None),
+        "currency":    info_raw.get("currency", "INR"),
+        "description": info_raw.get("longBusinessSummary", "")[:300],
+        "fiftyTwoWeekHigh": info_raw.get("fiftyTwoWeekHigh", None),
+        "fiftyTwoWeekLow":  info_raw.get("fiftyTwoWeekLow", None),
+        "pe_ratio":    info_raw.get("trailingPE", None),
     }
+    
+    # Save to cache
+    CACHE_INFO[ticker] = {"info": info, "time": now}
+    return info
 
 
 def df_to_json_records(df: pd.DataFrame) -> list:

@@ -42,7 +42,7 @@ class NumpyResponse(Response):
         ).encode("utf-8")
 
 # Internal modules
-from routers import forecast, analysis, chart_vision, health
+from routers import forecast, analysis, chart_vision, health, combined
 
 # ─── App Init ────────────────────────────────────────────
 app = FastAPI(
@@ -77,6 +77,7 @@ app.include_router(health.router,       prefix="/api",          tags=["Health"])
 app.include_router(forecast.router,     prefix="/api/forecast", tags=["Forecasting"])
 app.include_router(analysis.router,     prefix="/api/analysis", tags=["Technical Analysis"])
 app.include_router(chart_vision.router, prefix="/api/chart",    tags=["Chart Vision"])
+app.include_router(combined.router,     prefix="/api/combined", tags=["Combined Analysis"])
 
 
 # ─── Root ─────────────────────────────────────────────────
