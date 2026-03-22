@@ -281,7 +281,7 @@ function showErr(sym,msg){
   dsp('d0','none');dsp('d-main','none');
   var el=document.getElementById('d-err');el.style.display='block';
   el.innerHTML='<strong>⚠ Could not load '+sym+'</strong><br>'+(msg||'Backend Error')+
-    '<br><br>Make sure the FastAPI backend is running on http://localhost:8000';
+    '<br><br>If the error mentions Rate Limits, Yahoo Finance may be busy. Please try again in 5 minutes.';
 }
 
 function fmt(n) {
