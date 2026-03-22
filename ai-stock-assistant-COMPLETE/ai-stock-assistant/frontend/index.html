@@ -437,7 +437,7 @@ function cvProcess(file){
       '<div class="opts" style="margin-top:10px">'+(res.support_resistance||'')+'</div>'+
       '<ul class="reasons" style="margin-top:10px">'+(res.reasons||[]).map(r=>'<li>'+r+'</li>').join('')+'</ul></div>';
   }).catch(err=>{
-    document.getElementById('cv-out').innerHTML = '<div class="err"><strong>Analysis failed:</strong> '+err.message+'</div>';
+    document.getElementById('lmsg').innerHTML = '<span style="color:red">Backend Error: ' + e.message + '</span><br><small>If the error mentions Rate Limits, Yahoo Finance may be busy. Please try again in 5 minutes.</small>';
   });
 }
 function pg(cls,items){
