@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+
+# AI Models & Data
+models/*.h5
+models/*.pkl
+data/*.csv
+!data/sample_*.csv
+
+# IDEs & System
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Project Specific
+logs/
+temp/
+tmp/
+.gemini/
+brain/
+*.log

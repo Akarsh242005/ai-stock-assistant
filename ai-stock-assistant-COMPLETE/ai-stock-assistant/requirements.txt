@@ -1,0 +1,46 @@
+# Core Data Science
+numpy
+pandas
+scikit-learn
+scipy
+
+# Stock Data
+yfinance
+pandas-datareader
+
+# Deep Learning (LSTM)
+# TensorFlow currently lacks 3.13 wheels for 2.x in standard pypi; we'll see if it installs.
+tensorflow
+keras
+
+# Time Series Forecasting
+prophet
+statsmodels
+pmdarima
+
+# Technical Analysis
+ta
+pandas-ta
+
+# Computer Vision (Chart Analysis)
+opencv-python
+Pillow
+torch
+torchvision
+
+# Web Framework
+fastapi
+uvicorn
+python-multipart
+
+# Visualization
+plotly
+matplotlib
+seaborn
+
+# Utilities
+python-dotenv
+requests
+pydantic
+joblib
+tqdm
