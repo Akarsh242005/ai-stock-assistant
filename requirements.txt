@@ -1,21 +1,21 @@
 # Core Data Science
-numpy
-pandas
-scikit-learn
-scipy
+numpy==1.23.5
+pandas==1.5.3
+scikit-learn==1.2.2
+scipy==1.10.1
 
 # Stock Data
-yfinance
-pandas-datareader
+yfinance==0.2.37
+pandas-datareader==0.10.0
 
 # Deep Learning (LSTM) - Using CPU version to save memory
-tensorflow-cpu
-keras
+tensorflow-cpu==2.13.0
+keras==2.13.1
 
 # Time Series Forecasting
-prophet
-statsmodels
-pmdarima
+prophet==1.1.5
+statsmodels==0.14.0
+pmdarima==2.0.4
 
 # Technical Analysis
 ta
