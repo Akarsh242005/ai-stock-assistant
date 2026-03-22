@@ -236,7 +236,7 @@ function go(){
   setBtn(false);
   document.getElementById('lmsg').textContent='Fetching AI analysis for '+raw.toUpperCase()+'...';
   
-  const BACKEND_URL = 'http://localhost:8000';
+  const BACKEND_URL = 'https://ai-stock-assistant-2.onrender.com';
   Promise.all([
     fetch(BACKEND_URL + '/api/analysis/' + tk).then(r => r.json()),
     fetch(BACKEND_URL + '/api/forecast/' + tk).then(r => r.json())
