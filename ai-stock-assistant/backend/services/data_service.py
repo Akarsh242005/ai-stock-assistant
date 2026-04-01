@@ -12,13 +12,22 @@ import pandas as pd
 import numpy as np
 import time
 import requests
-from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+import os
+
+try:
+    from .. import config
+except (ImportError, ValueError):
+    import backend.config as config
 
 # Create a session with custom headers to prevent rate limits
 _SESSION = requests.Session()
 _SESSION.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Origin": "https://finance.yahoo.com",
+    "Referer": "https://finance.yahoo.com"
 })
 
 # In-memory cache to prevent rate limiting
@@ -88,22 +97,49 @@ def fetch_stock_data(
         df = yf.download(ticker, period=period, interval=interval, progress=False)
 
     if df is None or df.empty:
+        # One last try with a fresh session
+        try:
+            temp_session = requests.Session()
+            df = yf.download(ticker, period=period, interval=interval, progress=False, session=temp_session)
+        except:
+            pass
+            
+    if df is None or df.empty:
         raise ValueError(f"No data found for symbol: {symbol} (ticker: {ticker}). Yahoo Finance may be blocking the request.")
 
     # Flatten MultiIndex columns if present
-    if isinstance(df.columns, pd.MultiIndex):
+    if hasattr(df, 'columns') and isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
-    df.index = pd.to_datetime(df.index)
-    df.dropna(inplace=True)
+    if hasattr(df, 'index'):
+        df.index = pd.to_datetime(df.index)
+    
+    if hasattr(df, 'dropna'):
+        df.dropna(inplace=True)
 
     # Save to cache
     _DATA_CACHE[cache_key] = (df, now)
     return df
 
 
+def fetch_finnhub_info(symbol: str) -> Dict[str, Any]:
+    """Fetch metadata from Finnhub if possible."""
+    if not config.FINNHUB_API_KEY:
+        return {}
+    
+    # Try to map to Finnhub format (usually just the symbol or SYMBOL.NS)
+    # Finnhub often uses US symbols without prefix
+    try:
+        url = f"https://finnhub.io/api/v1/stock/profile2?symbol={symbol}&token={config.FINNHUB_API_KEY}"
+        resp = requests.get(url, timeout=5)
+        if resp.status_code == 200:
+            return resp.json()
+    except:
+        pass
+    return {}
+
 def fetch_stock_info(symbol: str) -> Dict[str, Any]:
-    """Fetch company metadata / stock info with caching."""
+    """Fetch company metadata / stock info with caching and multi-source fallback."""
     symbol = symbol.upper()
     now = time.time()
 
@@ -113,23 +149,40 @@ def fetch_stock_info(symbol: str) -> Dict[str, Any]:
             return info
 
     ticker = resolve_ticker(symbol)
+    
+    # Try Finnhub First for Metadata (More reliable than Yahoo .info)
+    fh_info = fetch_finnhub_info(symbol)
+    if not fh_info and "." in ticker:
+        # Try without suffix for Indian stocks in Finnhub (sometimes works)
+        fh_info = fetch_finnhub_info(symbol.split(".")[0])
+
+    # Fallback to Yahoo for deeper metadata or if Finnhub failed
     yf_ticker = yf.Ticker(ticker, session=_SESSION)
     try:
-        info = yf_ticker.info
+        yf_info = yf_ticker.info
     except Exception:
-        info = {}
+        yf_info = {}
 
+    # Hybrid Result
     result = {
-        "name":        info.get("longName", symbol),
-        "sector":      info.get("sector", "N/A"),
-        "industry":    info.get("industry", "N/A"),
-        "market_cap":  info.get("marketCap", None),
-        "currency":    info.get("currency", "INR"),
-        "description": str(info.get("longBusinessSummary", ""))[:300],
-        "52w_high":    info.get("fiftyTwoWeekHigh", None),
-        "52w_low":     info.get("fiftyTwoWeekLow", None),
-        "pe_ratio":    info.get("trailingPE", None),
+        "name":        fh_info.get("name") or yf_info.get("longName") or symbol,
+        "sector":      fh_info.get("finnhubIndustry") or yf_info.get("sector") or "N/A",
+        "industry":    fh_info.get("finnhubIndustry") or yf_info.get("industry") or "N/A",
+        "market_cap":  yf_info.get("marketCap", None),
+        "currency":    fh_info.get("currency") or yf_info.get("currency") or "INR",
+        "description": str(yf_info.get("longBusinessSummary", ""))[:300],
+        "52w_high":    yf_info.get("fiftyTwoWeekHigh", None),
+        "52w_low":     yf_info.get("fiftyTwoWeekLow", None),
+        "pe_ratio":    yf_info.get("trailingPE", None),
     }
+
+    # If we still have almost no info, try to get at least the name from yfinance download if available
+    if result["name"] == symbol:
+        try:
+            # Maybe the data cache has it?
+            pass # We could try more here but usually if download worked, info might work eventually
+        except:
+            pass
 
     _INFO_CACHE[symbol] = (result, now)
     return result

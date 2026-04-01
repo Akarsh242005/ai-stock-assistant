@@ -67,14 +67,18 @@ def compute_moving_averages(close: pd.Series) -> Dict[str, pd.Series]:
 def generate_signal(df: pd.DataFrame) -> Dict[str, Any]:
     """
     Combine all indicators to produce a final trading signal.
-
-    Scoring system:
-        +1 per bullish indicator
-        -1 per bearish indicator
-        0 for neutral
-
-    Returns signal dict with reasoning.
     """
+    if df is None or df.empty or len(df) < 20:
+        return {
+            "signal": "N/A",
+            "confidence": 0,
+            "score": 0,
+            "color": "#888888",
+            "reasons": ["Insufficient data for technical analysis"],
+            "indicators": {},
+            "chart_data": {}
+        }
+    
     close = df["Close"]
 
     # Compute indicators

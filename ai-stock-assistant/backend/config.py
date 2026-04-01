@@ -31,6 +31,7 @@ LSTM_USE_CACHE     = os.getenv("LSTM_USE_CACHE", "true").lower() == "true"
 # ── Data ──────────────────────────────────────────────────
 DEFAULT_PERIOD   = os.getenv("DEFAULT_PERIOD", "2y")
 DEFAULT_INTERVAL = os.getenv("DEFAULT_INTERVAL", "1d")
+FINNHUB_API_KEY  = os.getenv("FINNHUB_API_KEY", "d76ehnhr01qm4b7tvvqgd76ehnhr01qm4b7tvvr0")
 
 # ── Chart Vision ──────────────────────────────────────────
 MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", 10))
