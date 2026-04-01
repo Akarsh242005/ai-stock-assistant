@@ -1,0 +1,41 @@
+version: "3.9"
+
+# ============================================================
+# AI Stock Market Forecasting System — Docker Compose
+# ============================================================
+# Usage:
+#   docker-compose up --build
+#   → Backend:  http://localhost:8000/api/docs
+#   → Frontend: http://localhost:3000
+# ============================================================
+
+services:
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: stockvision-api
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./models:/app/models          # Persist trained model weights
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    container_name: stockvision-ui
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

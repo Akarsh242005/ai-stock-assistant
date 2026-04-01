@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI StockVision Pro — Premium Trading Terminal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--g:#22c55e;--r:#ef4444;--y:#eab308;--b:#3b82f6;--bg:#020617;--s:#0f172a;--s2:#1e293b;--bdr:#334155;--txt:#f8fafc;--mute:#94a3b8;--faint:#475569;--acc:#67e8f9}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--txt);font-size:14px;min-height:100vh;overflow-x:hidden}
+input,button{font-family:inherit}
+.app{min-height:100vh;display:flex;flex-direction:column}
+.topbar{background:rgba(15,23,42,.8);backdrop-filter:blur(10px);border-bottom:1px solid var(--bdr);padding:14px 20px;display:flex;gap:12px;align-items:center;position:sticky;top:0;z-index:100}
+.logo{font-weight:800;font-size:18px;background:linear-gradient(90deg,var(--g),var(--acc));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin-right:12px;letter-spacing:-0.5px}
+.topbar input{flex:1;background:var(--s2);border:1px solid var(--bdr);border-radius:12px;color:var(--txt);padding:12px 18px;font-size:14px;outline:none;transition:all .2s;box-shadow:0 1px 2px rgba(0,0,0,0.2)}
+.topbar input:focus{border-color:var(--acc);box-shadow:0 0 0 2px rgba(103,232,249,0.1)}
+.gbtn{background:linear-gradient(135deg,var(--g),#16a34a);color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;transition:transform .1s,opacity .2s;box-shadow:0 4px 12px rgba(34,197,94,0.2)}
+.gbtn:hover{opacity:0.9;transform:translateY(-1px)}
+.gbtn:active{transform:translateY(0)}
+.gbtn:disabled{background:var(--s2);color:var(--mute);cursor:not-allowed;box-shadow:none}
+.tabs{display:flex;background:var(--s);border-bottom:1px solid var(--bdr);overflow-x:auto;padding:0 16px}
+.tab{padding:14px 20px;font-size:13px;cursor:pointer;color:var(--mute);border-bottom:2px solid transparent;white-space:nowrap;transition:all .2s;font-weight:600;letter-spacing:0.3px}
+.tab:hover{color:var(--txt)}
+.tab.on{color:var(--acc);border-bottom-color:var(--acc)}
+.pane{display:none;padding:24px;max-width:1400px;margin:0 auto;width:100%}
+.pane.on{display:block;animation:fadeIn 0.4s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.g2{display:grid;grid-template-columns:1fr 1.5fr;gap:20px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:20px}
+.card{background:var(--s);border:1px solid var(--bdr);border-radius:16px;padding:20px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1)}
+.clbl{font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;font-weight:700}
+.cval{font-size:24px;font-weight:800;line-height:1;font-family:'Space Mono',monospace;margin-bottom:4px}
+.csub{font-size:12px;color:var(--mute);font-weight:500}
+.sec-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--bdr)}
+.sec-t{font-size:12px;font-weight:800;color:var(--mute);text-transform:uppercase;letter-spacing:1px}
+.reasons{list-style:none}
+.reasons li{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px;color:var(--mute);display:flex;gap:10px;line-height:1.4}
+.reasons li:last-child{border-bottom:none}
+.reasons li::before{content:'•';color:var(--acc);font-weight:900}
+.chip{background:rgba(255,255,255,0.03);border:1px solid var(--bdr);border-radius:12px;padding:12px 16px;display:flex;flex-direction:column;gap:4px}
+.istrip{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+.sig{display:inline-flex;align-items:center;gap:8px;padding:10px 24px;border-radius:100px;font-weight:800;font-size:16px;font-family:'Space Mono',monospace;box-shadow:0 4px 12px rgba(0,0,0,0.2)}
+.sBUY{background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3)}
+.sSELL{background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3)}
+.sHOLD,.sWAIT{background:rgba(234,179,8,0.15);color:#fbbf24;border:1px solid rgba(234,179,8,0.3)}
+.bar{height:6px;background:var(--s2);border-radius:100px;overflow:hidden;margin-top:12px}
+.bfill{height:100%;border-radius:100px;transition:width 1s cubic-bezier(0.4,0,0.2,1)}
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:100px 20px;color:var(--mute);text-align:center}
+.spin{width:40px;height:40px;border:3px solid var(--s2);border-top-color:var(--acc);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:20px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.err{background:rgba(239,64,64,0.08);border:1px solid rgba(239,64,64,0.2);border-radius:16px;padding:24px;color:#fca5a5;max-width:500px;margin:40px auto;line-height:1.6;text-align:center}
+.dz{border:2px dashed var(--bdr);border-radius:20px;padding:60px 40px;text-align:center;cursor:pointer;transition:all .3s;background:rgba(15,23,42,0.3)}
+.dz:hover,.dz.drag{border-color:var(--acc);background:rgba(103,232,249,0.05)}
+.dz h3{font-size:18px;font-weight:700;margin-bottom:10px}
+.tc{border-radius:20px;padding:24px;border:1px solid var(--bdr);background:rgba(15,23,42,0.5);backdrop-filter:blur(10px)}
+.tc-call{border-left:6px solid var(--g)}
+.tc-put{border-left:6px solid var(--r)}
+.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}
+.pbox{background:rgba(255,255,255,0.03);border-radius:12px;padding:12px;border:1px solid rgba(255,255,255,0.05)}
+.pv{font-size:14px;font-weight:700;font-family:'Space Mono',monospace}
+.opts{background:rgba(255,255,255,0.02);border-radius:12px;padding:16px;margin-top:16px;font-size:13px;line-height:1.6;color:var(--mute)}
+.thumb{width:100%;border-radius:16px;margin-bottom:20px;border:1px solid var(--bdr);box-shadow:0 8px 24px rgba(0,0,0,0.3)}
+canvas{width:100% !important;height:100% !important}
+.chart-container{height:300px;position:relative}
+@media(max-width:900px){.g2,.g3,.g4{grid-template-columns:1fr}}
+.qce{margin-top:100px;text-align:center}
+.qce h1{font-size:40px;font-weight:900;margin-bottom:16px;letter-spacing:-1px}
+.qch{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:24px}
+.qc{padding:10px 20px;background:var(--s);border:1px solid var(--bdr);border-radius:100px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;color:var(--mute)}
+.qc:hover{border-color:var(--acc);color:var(--txt);transform:translateY(-2px)}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="logo">StockVision Pro</div>
+    <input id="sym" placeholder="Search Symbol (e.g. RELIANCE, TCS, TSLA...)" onkeydown="if(event.key==='Enter')go()">
+    <button class="gbtn" id="gbtn" onclick="go()">Analyze</button>
+  </div>
+  
+  <div class="tabs">
+    <div class="tab on" id="t-dash" onclick="swTab('dash',this)">Terminal</div>
+    <div class="tab" id="t-ta" onclick="swTab('ta',this)">Indicators</div>
+    <div class="tab" id="t-fc" onclick="swTab('fc',this)">AI Predictions</div>
+    <div class="tab" id="t-cv" onclick="swTab('cv',this)">Chart Vision</div>
+  </div>
+
+  <div id="p-dash" class="pane on">
+    <div id="d0" class="qce">
+      <h1>AI Trading Intelligence</h1>
+      <p style="color:var(--mute);font-size:16px">LSTM • Prophet • ARIMA • Computer Vision</p>
+      <div class="qch">
+        <div class="qc" onclick="qs('NIFTY')">NIFTY 50</div>
+        <div class="qc" onclick="qs('IREDA')">IREDA</div>
+        <div class="qc" onclick="qs('RELIANCE')">RELIANCE</div>
+        <div class="qc" onclick="qs('AAPL')">APPLE</div>
+        <div class="qc" onclick="qs('NVDA')">NVIDIA</div>
+      </div>
+    </div>
+    <div id="d-load" class="loading" style="display:none">
+      <div class="spin"></div>
+      <h3 id="lmsg">Waking up neural networks...</h3>
+      <p style="margin-top:8px;font-size:12px">Free tier may take 20s to start</p>
+    </div>
+    <div id="d-err" class="err" style="display:none"></div>
+    <div id="d-main" style="display:none">
+      <div class="g4" id="cards"></div>
+      <div class="g2">
+        <div class="card">
+          <div class="sec-h"><div class="sec-t">Technical Signal</div></div>
+          <div id="sig-box"></div>
+        </div>
+        <div class="card">
+          <div class="sec-h"><div class="sec-t">Price Action (6MO)</div></div>
+          <div class="chart-container"><canvas id="c-px"></canvas></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:20px">
+        <div class="sec-h"><div class="sec-t">Market Data Profile</div></div>
+        <div class="g4" id="stats"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="p-ta" class="pane">
+    <div class="istrip" id="ta-chips"></div>
+    <div class="g2">
+      <div class="card">
+        <div class="sec-h"><div class="sec-t">Relative Strength Index (RSI)</div></div>
+        <div class="chart-container"><canvas id="c-rsi"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="sec-h"><div class="sec-t">MACD Trend</div></div>
+        <div class="chart-container"><canvas id="c-macd"></canvas></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:20px">
+      <div class="sec-h"><div class="sec-t">Bollinger Bands & Moving Averages</div></div>
+      <div class="chart-container" style="height:400px"><canvas id="c-bb"></canvas></div>
+    </div>
+  </div>
+
+  <div id="p-fc" class="pane">
+    <div class="g3" id="fc-cards"></div>
+    <div class="card" style="margin-top:20px">
+      <div class="sec-h">
+        <div class="sec-t">Multi-Model AI Forecast Convergence</div>
+      </div>
+      <div class="chart-container" style="height:450px"><canvas id="c-fc"></canvas></div>
+    </div>
+  </div>
+
+  <div id="p-cv" class="pane">
+    <div class="g2">
+      <div class="card">
+        <div class="dz" id="dz" onclick="document.getElementById('fi').click()">
+          <div style="font-size:40px;margin-bottom:16px">📷</div>
+          <h3>Scan Chart Image</h3>
+          <p style="color:var(--mute);margin-bottom:20px">Upload screenshot from Zerodha, TradingView, etc.</p>
+          <button class="gbtn" style="background:var(--s2);box-shadow:none">Select File</button>
+        </div>
+        <input type="file" id="fi" accept="image/*" style="display:none" onchange="doFile(event)">
+      </div>
+      <div id="cv-out">
+        <div class="loading" style="padding:40px">
+          <p>Waiting for image upload...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const API = 'https://ai-stock-assistant-2.onrender.com/api';
+var D={},CH={};
+
+const SYMS = {'RELIANCE':'RELIANCE.NS','TCS':'TCS.NS','IREDA':'IREDA.NS','AAPL':'AAPL','TSLA':'TSLA','NVDA':'NVDA','NIFTY':'^NSEI'};
+
+function res(s){var u=s.trim().toUpperCase();return SYMS[u]||(u.includes('.')||u[0]==='^'?u:u+'.NS');}
+function dsp(id,v){var e=document.getElementById(id);if(e)e.style.display=v;}
+function swTab(id,el){
+  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.getElementById('p-'+id).classList.add('on');
+  el?.classList.add('on') || document.getElementById('t-'+id).classList.add('on');
+}
+function qs(s){document.getElementById('sym').value=s;go();}
+
+async function go(){
+  var raw=document.getElementById('sym').value.trim();
+  if(!raw)return;
+  var tk=res(raw);
+  dsp('d0','none');dsp('d-load','flex');dsp('d-main','none');dsp('d-err','none');
+  document.getElementById('gbtn').disabled=true;
+  
+  try {
+    document.getElementById('lmsg').textContent='Computing Technical Indicators...';
+    let taRes = await fetch(`${API}/analysis/${tk}`);
+    if(!taRes.ok) throw new Error('Backend failed to fetch data. Try again in 10s.');
+    let ta = await taRes.json();
+    
+    document.getElementById('lmsg').textContent='Running Neural Forecasts... (10s)';
+    let fcRes = await fetch(`${API}/forecast/${tk}/compare`);
+    let fcomp = await fcRes.json();
+    
+    let ffullRes = await fetch(`${API}/forecast/${tk}`);
+    let ffull = await ffullRes.json();
+    
+    D = {ta, fc:fcomp, fcFull:ffull, sym:tk, cur:ta.info.currency||'INR', lp:ta.indicators.close};
+    
+    dsp('d-load','none'); dsp('d-main','block');
+    document.getElementById('gbtn').disabled=false;
+    renderAll();
+  } catch(e) {
+    dsp('d-load','none'); dsp('d-err','block');
+    document.getElementById('d-err').textContent = e.message;
+    document.getElementById('gbtn').disabled=false;
+  }
+}
+
+function fmt(n,d=2){
+  if(n==null||isNaN(n))return'—';
+  let s = D.cur==='USD'?'$':(D.cur==='INR'?'₹':'');
+  return s+ (+n).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+}
+
+function renderAll(){
+  renderDash();
+  renderTA();
+  renderFC();
+}
+
+function renderDash(){
+  let s = D.ta;
+  let chg = s.indicators.close - s.info.previous_close;
+  let chgp = (chg/s.info.previous_close)*100;
+  let color = chg>=0?varC('--g'):varC('--r');
+  
+  document.getElementById('cards').innerHTML = 
+    sc('Price', fmt(D.lp), (chg>=0?'+':'')+chgp.toFixed(2)+'%', color)+
+    sc('Signal', s.signal, s.confidence+'% Confidence', s.color)+
+    sc('52W High', fmt(s.info.fifty_two_week_high||s.info['52w_high']), 'Year Range Peak', varC('--mute'))+
+    sc('Status', D.fc.consensus, 'Model Consensus', varC('--acc'));
+
+  document.getElementById('stats').innerHTML = 
+    sc('Market Cap', fmt(s.info.market_cap||0,0), 'Size', '#888')+
+    sc('P/E Ratio', (s.info.forward_pe||'—'), 'Valuation', '#888')+
+    sc('Volume', (s.info.volume||0).toLocaleString(), 'Liquidity', '#888')+
+    sc('Beta', (s.info.beta||'—'), 'Volatility', '#888');
+
+  document.getElementById('sig-box').innerHTML = `
+    <div style="text-align:center;padding:20px 0">
+      <div class="sig s${s.signal}">${s.signal}</div>
+      <div class="bar"><div class="bfill" style="width:${s.confidence}%;background:${s.color}"></div></div>
+      <p style="font-size:11px;color:var(--mute);margin-top:8px">Alpha Score: ${s.score}</p>
+    </div>
+    <ul class="reasons">${s.reasons.map(r=>`<li>${r}</li>`).join('')}</ul>`;
+
+  kc('c-px');
+  CH['c-px'] = new Chart(document.getElementById('c-px'), {
+    type:'line',
+    data: {
+      labels: s.chart_data.dates,
+      datasets: [{data:s.chart_data.close, borderColor:color, borderWidth:2, pointRadius:0, fill:true, backgroundColor:color+'11', tension:0.3}]
+    },
+    options: bo(v=>fmt(v))
+  });
+}
+
+function renderTA(){
+  let i = D.ta.indicators;
+  let cd = D.ta.chart_data;
+  document.getElementById('ta-chips').innerHTML = [
+    {l:'RSI', v:i.rsi.toFixed(1), c:i.rsi<30?'--g':i.rsi>70?'--r':'--txt'},
+    {l:'MACD', v:i.macd.toFixed(3), c:i.macd>i.macd_signal?'--g':'--r'},
+    {l:'SMA 50', v:fmt(i.sma_50), c:'--y'},
+    {l:'SMA 200', v:fmt(i.sma_200), c:'--b'}
+  ].map(x=>`<div class="chip"><div class="clbl">${x.l}</div><div class="pv" style="color:var(${x.c})">${x.v}</div></div>`).join('');
+
+  kc('c-rsi'); kc('c-macd'); kc('c-bb');
+  CH['c-rsi']=new Chart(document.getElementById('c-rsi'),{type:'line',data:{labels:cd.dates,datasets:[{data:cd.rsi,borderColor:'#a78bfa',pointRadius:0,fill:true,backgroundColor:'rgba(167,139,250,0.1)'}]},options:Object.assign(bo(),{scales:{y:{min:0,max:100}}})});
+  CH['c-macd']=new Chart(document.getElementById('c-macd'),{type:'bar',data:{labels:cd.dates,datasets:[{label:'Hist',data:cd.histogram,backgroundColor:cd.histogram.map(v=>v>=0?'#22c55e99':'#ef444499')},{type:'line',label:'MACD',data:cd.macd_line,borderColor:'#3b82f6',pointRadius:0}]},options:bo()});
+  CH['c-bb']=new Chart(document.getElementById('c-bb'),{type:'line',data:{labels:cd.dates,datasets:[{label:'Upper',data:cd.bb_upper,borderColor:'#3b82f622',pointRadius:0,fill:'+1',backgroundColor:'#3b82f605'},{label:'Lower',data:cd.bb_lower,borderColor:'#3b82f622',pointRadius:0,fill:false},{label:'Price',data:cd.close,borderColor:varC('--acc'),borderWidth:2,pointRadius:0}]},options:bo(v=>fmt(v))});
+}
+
+function renderFC(){
+  let f = D.fcFull;
+  let b = D.fc.best_model;
+  document.getElementById('fc-cards').innerHTML = 
+    sc('LSTM Direction', f.lstm.direction, 'RMSE: '+f.lstm.metrics.rmse.toFixed(2), f.lstm.direction==='UP'?varC('--g'):varC('--r'))+
+    sc('Prophet Target', fmt(f.prophet.forecast[6].price), '7D Trend', varC('--acc'))+
+    sc('ARIMA Target', fmt(f.arima.forecast[6].price), 'Statistical', varC('--y'))+
+    sc('Top Model', b.model.toUpperCase(), 'Min RMSE', '#a78bfa');
+
+  kc('c-fc');
+  let h = D.ta.chart_data.close.slice(-30);
+  let labels = [...D.ta.chart_data.dates.slice(-30), ...f.lstm.forecast.map(x=>x.date)];
+  CH['c-fc'] = new Chart(document.getElementById('c-fc'), {
+    type:'line',
+    data: {
+      labels: labels,
+      datasets: [
+        {label:'Past', data:[...h, ...Array(7).fill(null)], borderColor:'#475569', borderWidth:2, pointRadius:0},
+        {label:'LSTM', data:[...Array(29).fill(null), h[29], ...f.lstm.forecast.map(x=>x.price)], borderColor:varC('--acc'), borderWidth:3},
+        {label:'Prophet', data:[...Array(29).fill(null), h[29], ...f.prophet.forecast.map(x=>x.price)], borderColor:'#a78bfa', borderDash:[5,5]},
+        {label:'ARIMA', data:[...Array(29).fill(null), h[29], ...f.arima.forecast.map(x=>x.price)], borderColor:varC('--y'), borderDash:[2,2]}
+      ]
+    },
+    options: bo(v=>fmt(v))
+  });
+}
+
+function doFile(e){
+  let f=e.target.files[0]; if(!f)return;
+  let rd=new FileReader(); rd.readAsDataURL(f);
+  rd.onload=e=>{
+    document.getElementById('cv-out').innerHTML = '<div class="loading"><div class="spin"></div><p>AI analyzing chart architecture...</p></div>';
+    let fd=new FormData(); fd.append('file',f);
+    fetch(`${API}/chart/analyze`, {method:'POST', body:fd})
+      .then(r=>r.json()).then(res=>renderCV(res, e.target.result))
+      .catch(()=>document.getElementById('cv-out').innerHTML='<div class="err">Vision API Error</div>');
+  }
+}
+
+function renderCV(res, thumb){
+  let cls = res.signal==='BUY'?'call':'put';
+  let setup = '';
+  if(D.lp && res.signal !== 'WAIT'){
+    let b = res.signal==='BUY';
+    setup = `<div class="pgrid">
+      <div class="pbox"><div class="clbl">Entry</div><div class="pv">${fmt(D.lp)}</div></div>
+      <div class="pbox"><div class="clbl">Stop</div><div class="pv" style="color:var(--r)">${fmt(b?D.lp*0.985:D.lp*1.015)}</div></div>
+      <div class="pbox"><div class="clbl">Target</div><div class="pv" style="color:var(--g)">${fmt(b?D.lp*1.03:D.lp*0.97)}</div></div>
+    </div>`;
+  }
+  document.getElementById('cv-out').innerHTML = `
+    <img src="${thumb}" class="thumb">
+    <div class="tc tc-${cls}">
+      <h2 style="color:${res.color}">${res.signal} DETECTED</h2>
+      <p style="font-size:12px;color:var(--mute);margin:5px 0">${res.trend} Pattern • ${res.confidence}% Probability</p>
+      ${setup}
+      <div class="opts"><strong>AI Rationale:</strong><br>${res.reasons.join('<br>')}</div>
+    </div>`;
+}
+
+function sc(l,v,s,c){
+  return `<div class="card" style="border-top:3px solid ${c}">
+    <div class="clbl">${l}</div>
+    <div class="cval" style="color:${c}">${v}</div>
+    <div class="csub">${s}</div></div>`;
+}
+function kc(id){ if(CH[id]){CH[id].destroy(); delete CH[id];} }
+function varC(id){ return getComputedStyle(document.documentElement).getPropertyValue(id).trim(); }
+function bo(cb){
+  return {responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>cb?cb(c.raw):c.raw}}},scales:{x:{display:false},y:{grid:{color:'rgba(255,255,255,0.03)'},ticks:{color:'#64748b',font:{size:10}}}}};
+}
+</script>
+</body>
+</html>
