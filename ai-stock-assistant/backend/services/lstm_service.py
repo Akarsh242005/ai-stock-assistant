@@ -105,10 +105,16 @@ def train_and_predict(
 
     # ── Model ─────────────────────────────────────────────
     model_path = os.path.join(MODEL_DIR, f"lstm_{symbol.replace('.', '_')}.h5")
+    model = None
 
     if use_cache and os.path.exists(model_path):
-        model = load_model(model_path)
-    else:
+        try:
+            model = load_model(model_path)
+        except Exception as e:
+            print(f"Error loading model for {symbol}: {e}. Retraining...")
+            model = None
+
+    if model is None:
         model = build_lstm_model(WINDOW_SIZE)
         early_stop = EarlyStopping(monitor="val_loss", patience=3, restore_best_weights=True)
         model.fit(
