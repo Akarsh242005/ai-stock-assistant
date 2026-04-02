@@ -148,6 +148,19 @@ def fetch_stock_data(
     if hasattr(df, 'columns') and isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
+    # NORMALIZE COLUMN NAMES (Standardize to TitleCase for yfinance compatibility)
+    # This fixes KeyError: 'Close' when using yahooquery (which returns lowercase)
+    cols_map = {
+        'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume', 'adjclose': 'Adj Close',
+        'adj close': 'Adj Close'
+    }
+    if hasattr(df, 'rename'):
+        df.rename(columns=lambda x: cols_map.get(x.lower(), x), inplace=True)
+
+    # Ensure critical columns exist
+    if 'Close' not in df.columns and 'close' in df.columns:
+        df['Close'] = df['close']
+
     if hasattr(df, 'index'):
         df.index = pd.to_datetime(df.index)
     
