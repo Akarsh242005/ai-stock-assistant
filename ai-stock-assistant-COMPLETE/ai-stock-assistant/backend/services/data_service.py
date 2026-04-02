@@ -118,19 +118,24 @@ def fetch_stock_data(
         yq = YQTicker(ticker, session=_SESSION)
         # Map period/interval to yahooquery format
         history = yq.history(period=period, interval=interval)
-        if not history.empty:
+        if hasattr(history, 'empty') and not history.empty:
             if isinstance(history.index, pd.MultiIndex):
-                df = history.xs(ticker)
+                # Safely extract the ticker from MultiIndex
+                try:
+                    df = history.xs(ticker)
+                except KeyError:
+                    # If ticker is not exactly in index (e.g. index has different format), take first group
+                    df = history.iloc[history.index.get_level_values(0) == ticker]
             else:
                 df = history
     except Exception as e:
         print(f"YahooQuery failed for {ticker}: {e}")
 
     # --- Layer 2: yfinance Fallback ---
-    if df is None or df.empty:
+    if df is None or (hasattr(df, 'empty') and df.empty):
         try:
-            _SESSION.headers.update(get_random_headers())
-            df = yf.download(ticker, period=period, interval=interval, progress=False, session=_SESSION)
+            # IMPORTANT: Let yf handle its own session to avoid 'curl_cffi' errors
+            df = yf.download(ticker, period=period, interval=interval, progress=False, session=None)
         except Exception as e:
             print(f"yfinance fallback failed for {ticker}: {e}")
 
