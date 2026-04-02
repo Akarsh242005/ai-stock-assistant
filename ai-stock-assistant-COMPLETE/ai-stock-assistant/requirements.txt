@@ -6,12 +6,13 @@ scipy
 
 # Stock Data
 yfinance
+yahooquery
 pandas-datareader
 
 # Deep Learning (LSTM)
 # TensorFlow currently lacks 3.13 wheels for 2.x in standard pypi; we'll see if it installs.
-tensorflow
-keras
+tensorflow>=2.16.1
+keras>=3.0
 
 # Time Series Forecasting
 prophet

@@ -1,9 +1,9 @@
 """
 ============================================================
-Technical Analysis Service
+Technical Analysis Service (Verdict Edition)
 ============================================================
 Computes RSI, MACD, Bollinger Bands, Moving Averages.
-Generates BUY / SELL / HOLD signals from combined logic.
+Generates BUY / SELL / HOLD signals with explicit verdicts.
 ============================================================
 """
 
@@ -11,11 +11,9 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any
 
-
 # ─── Indicator Calculations ───────────────────────────────
 
 def compute_rsi(close: pd.Series, period: int = 14) -> pd.Series:
-    """Relative Strength Index."""
     delta = close.diff()
     gain  = delta.clip(lower=0)
     loss  = -delta.clip(upper=0)
@@ -24,135 +22,100 @@ def compute_rsi(close: pd.Series, period: int = 14) -> pd.Series:
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
-
-def compute_macd(
-    close: pd.Series,
-    fast: int = 12,
-    slow: int = 26,
-    signal: int = 9,
-) -> Dict[str, pd.Series]:
-    """MACD line, signal line, histogram."""
-    ema_fast   = close.ewm(span=fast,   adjust=False).mean()
-    ema_slow   = close.ewm(span=slow,   adjust=False).mean()
-    macd_line  = ema_fast - ema_slow
+def compute_macd(close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> Dict[str, pd.Series]:
+    ema_fast = close.ewm(span=fast, adjust=False).mean()
+    ema_slow = close.ewm(span=slow, adjust=False).mean()
+    macd_line = ema_fast - ema_slow
     signal_line = macd_line.ewm(span=signal, adjust=False).mean()
-    histogram   = macd_line - signal_line
+    histogram = macd_line - signal_line
     return {"macd": macd_line, "signal": signal_line, "histogram": histogram}
 
-
-def compute_bollinger_bands(
-    close: pd.Series,
-    period: int = 20,
-    std_dev: float = 2.0,
-) -> Dict[str, pd.Series]:
-    """Upper band, lower band, middle band (SMA)."""
-    sma   = close.rolling(window=period).mean()
-    std   = close.rolling(window=period).std()
+def compute_bollinger_bands(close: pd.Series, period: int = 20, std_dev: float = 2.0) -> Dict[str, pd.Series]:
+    sma = close.rolling(window=period).mean()
+    std = close.rolling(window=period).std()
     upper = sma + std_dev * std
     lower = sma - std_dev * std
     return {"upper": upper, "middle": sma, "lower": lower}
 
-
 def compute_moving_averages(close: pd.Series) -> Dict[str, pd.Series]:
-    """50-day and 200-day Simple Moving Averages."""
     return {
         "sma_20":  close.rolling(20).mean(),
         "sma_50":  close.rolling(50).mean(),
         "sma_200": close.rolling(200).mean(),
     }
 
-
 # ─── Signal Generation ────────────────────────────────────
 
 def generate_signal(df: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Combine all indicators to produce a final trading signal.
-
-    Scoring system:
-        +1 per bullish indicator
-        -1 per bearish indicator
-        0 for neutral
-
-    Returns signal dict with reasoning.
-    """
     close = df["Close"]
-
-    # Compute indicators
-    rsi     = compute_rsi(close)
-    macd    = compute_macd(close)
-    bb      = compute_bollinger_bands(close)
-    mas     = compute_moving_averages(close)
+    rsi = compute_rsi(close)
+    macd = compute_macd(close)
+    bb = compute_bollinger_bands(close)
+    mas = compute_moving_averages(close)
 
     # Latest values
-    rsi_val   = float(rsi.iloc[-1])
-    macd_val  = float(macd["macd"].iloc[-1])
-    sig_val   = float(macd["signal"].iloc[-1])
+    rsi_val = float(rsi.iloc[-1])
+    macd_val = float(macd["macd"].iloc[-1])
+    sig_val = float(macd["signal"].iloc[-1])
     close_val = float(close.iloc[-1])
-    bb_upper  = float(bb["upper"].iloc[-1])
-    bb_lower  = float(bb["lower"].iloc[-1])
-    sma50     = float(mas["sma_50"].iloc[-1]) if not pd.isna(mas["sma_50"].iloc[-1]) else close_val
-    sma200    = float(mas["sma_200"].iloc[-1]) if not pd.isna(mas["sma_200"].iloc[-1]) else close_val
+    bb_upper = float(bb["upper"].iloc[-1])
+    bb_lower = float(bb["lower"].iloc[-1])
+    sma50 = float(mas["sma_50"].iloc[-1]) if not pd.isna(mas["sma_50"].iloc[-1]) else close_val
+    sma200 = float(mas["sma_200"].iloc[-1]) if not pd.isna(mas["sma_200"].iloc[-1]) else close_val
 
     score = 0
     reasons = []
 
-    # RSI analysis
+    # RSI (Oversold < 30, Overbought > 70)
     if rsi_val < 30:
         score += 2
-        reasons.append(f"RSI={rsi_val:.1f} — oversold (bullish)")
+        reasons.append(f"RSI={rsi_val:.1f} — extremely oversold (bullish)")
     elif rsi_val > 70:
         score -= 2
-        reasons.append(f"RSI={rsi_val:.1f} — overbought (bearish)")
-    else:
-        reasons.append(f"RSI={rsi_val:.1f} — neutral zone")
-
-    # MACD crossover
+        reasons.append(f"RSI={rsi_val:.1f} — extremely overbought (bearish)")
+    
+    # MACD Crossover
     if macd_val > sig_val:
         score += 1
-        reasons.append("MACD above signal line — bullish crossover")
+        reasons.append("MACD is in a bullish crossover state")
     else:
         score -= 1
-        reasons.append("MACD below signal line — bearish crossover")
-
+        reasons.append("MACD is in a bearish crossover state")
+    
     # Bollinger Bands
     if close_val <= bb_lower:
         score += 1
-        reasons.append("Price at lower Bollinger Band — potential reversal")
+        reasons.append("Price hitting lower Bollinger Band — potential reversal")
     elif close_val >= bb_upper:
         score -= 1
-        reasons.append("Price at upper Bollinger Band — potential pullback")
+        reasons.append("Price hitting upper Bollinger Band — potential pullback")
 
-    # Golden/Death Cross
+    # Trend (MA Cross)
     if sma50 > sma200:
         score += 1
-        reasons.append("Golden Cross: SMA50 > SMA200 (long-term bullish)")
+        reasons.append("Golden Cross (Bullish Pattern): SMA50 > SMA200")
     else:
         score -= 1
-        reasons.append("Death Cross: SMA50 < SMA200 (long-term bearish)")
+        reasons.append("Death Cross (Bearish Pattern): SMA50 < SMA200")
 
-    # Price vs SMA50
-    if close_val > sma50:
-        score += 1
-        reasons.append("Price above SMA50 — short-term bullish")
-    else:
-        score -= 1
-        reasons.append("Price below SMA50 — short-term bearish")
-
-    # Determine signal
+    # Determine explicit verdict
+    verdict = ""
     if score >= 3:
         signal = "BUY"
-        confidence = min(95, 60 + score * 7)
+        confidence = min(95, 75 + (score - 2) * 7)
         color = "#00ff88"
+        verdict = "STRONG BULLISH: Multiple indicators suggest a high-probability entry point." if score >= 5 else "BULLISH: Positive momentum detected. Good entry for long positions."
     elif score <= -3:
         signal = "SELL"
-        confidence = min(95, 60 + abs(score) * 7)
+        confidence = min(95, 75 + (abs(score) - 2) * 7)
         color = "#ff4466"
+        verdict = "STRONG BEARISH: Indicators suggest a major reversal or crash. Exit/Short suggested." if score <= -5 else "BEARISH: Negative momentum building. Consider protecting profits or exiting."
     else:
         signal = "HOLD"
-        confidence = 50 + abs(score) * 5
+        confidence = 60 + abs(score) * 5
         color = "#ffaa00"
+        verdict = "NEUTRAL: Market is consolidated or sideways. Wait for a clearer breakout."
 
-    # Build indicator snapshot
     indicators = {
         "rsi": round(rsi_val, 2),
         "macd": round(macd_val, 4),
@@ -164,33 +127,25 @@ def generate_signal(df: pd.DataFrame) -> Dict[str, Any]:
         "close":    round(close_val, 2),
     }
 
-    # Time-series for charts (last 100 rows)
     tail = df.tail(100).copy()
     tail.index = tail.index.strftime("%Y-%m-%d")
 
     chart_data = {
         "dates":      list(tail.index),
         "close":      [round(v, 2) for v in tail["Close"].tolist()],
-        "sma_50":     [round(v, 2) if not pd.isna(v) else None
-                       for v in mas["sma_50"].tail(100).tolist()],
-        "sma_200":    [round(v, 2) if not pd.isna(v) else None
-                       for v in mas["sma_200"].tail(100).tolist()],
-        "bb_upper":   [round(v, 2) if not pd.isna(v) else None
-                       for v in bb["upper"].tail(100).tolist()],
-        "bb_lower":   [round(v, 2) if not pd.isna(v) else None
-                       for v in bb["lower"].tail(100).tolist()],
-        "rsi":        [round(v, 2) if not pd.isna(v) else None
-                       for v in rsi.tail(100).tolist()],
-        "macd_line":  [round(v, 4) if not pd.isna(v) else None
-                       for v in macd["macd"].tail(100).tolist()],
-        "macd_signal":[round(v, 4) if not pd.isna(v) else None
-                       for v in macd["signal"].tail(100).tolist()],
-        "histogram":  [round(v, 4) if not pd.isna(v) else None
-                       for v in macd["histogram"].tail(100).tolist()],
+        "sma_50":     [round(v, 2) if not pd.isna(v) else None for v in mas["sma_50"].tail(100).tolist()],
+        "sma_200":    [round(v, 2) if not pd.isna(v) else None for v in mas["sma_200"].tail(100).tolist()],
+        "bb_upper":   [round(v, 2) if not pd.isna(v) else None for v in bb["upper"].tail(100).tolist()],
+        "bb_lower":   [round(v, 2) if not pd.isna(v) else None for v in bb["lower"].tail(100).tolist()],
+        "rsi":        [round(v, 2) if not pd.isna(v) else None for v in rsi.tail(100).tolist()],
+        "macd_line":  [round(v, 4) if not pd.isna(v) else None for v in macd["macd"].tail(100).tolist()],
+        "macd_signal":[round(v, 4) if not pd.isna(v) else None for v in macd["signal"].tail(100).tolist()],
+        "histogram":  [round(v, 4) if not pd.isna(v) else None for v in macd["histogram"].tail(100).tolist()],
     }
 
     return {
         "signal":     signal,
+        "verdict":    verdict,
         "confidence": round(confidence, 1),
         "score":      score,
         "color":      color,

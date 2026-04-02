@@ -1,20 +1,39 @@
 """
 ============================================================
-Stock Data Service
+Stock Data Service (Hardened Edition)
 ============================================================
-Fetches historical & intraday stock data using yfinance.
-Supports NSE (Indian) and global markets.
+Fetches historical & intraday stock data using:
+1. YahooQuery (Stealth Layer)
+2. yfinance (Primary Fallback)
+3. Finnhub (Fail-Soft Failover)
 ============================================================
 """
 
 import yfinance as yf
+from yahooquery import Ticker as YQTicker
 import pandas as pd
 import numpy as np
 import time
+import requests
+import random
 from functools import lru_cache
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+from backend.config import FINNHUB_API_KEY
 
+# Rotating User Agents to prevent Yahoo blocks
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/121.0.0.0",
+]
+
+def get_random_headers():
+    return {"User-Agent": random.choice(USER_AGENTS)}
+
+_SESSION = requests.Session()
+_SESSION.headers.update(get_random_headers())
 
 # Map common short names → yfinance tickers
 TICKER_MAP = {
@@ -32,7 +51,6 @@ TICKER_MAP = {
     "TSLA":      "TSLA",
 }
 
-
 # ─── Simple In-Memory Cache (TTL) ─────────────────────────
 CACHE_DATA: Dict[str, Any] = {}
 CACHE_INFO: Dict[str, Any] = {}
@@ -43,13 +61,40 @@ def resolve_ticker(symbol: str) -> str:
     upper = symbol.upper()
     return TICKER_MAP.get(upper, upper)
 
+def fetch_finnhub_candles(ticker: str, resolution: str = "D", days: int = 365) -> pd.DataFrame:
+    """Fail-soft fallback using Finnhub candles if Yahoo is unreachable."""
+    try:
+        if not FINNHUB_API_KEY:
+            return pd.DataFrame()
+        
+        end = int(time.time())
+        start = end - (days * 24 * 60 * 60)
+        
+        url = f"https://finnhub.io/api/v1/stock/candle?symbol={ticker}&resolution={resolution}&from={start}&to={end}&token={FINNHUB_API_KEY}"
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        
+        if data.get("s") != "ok":
+            return pd.DataFrame()
+            
+        df = pd.DataFrame({
+            "Open": data["o"],
+            "High": data["h"],
+            "Low": data["l"],
+            "Close": data["c"],
+            "Volume": data["v"]
+        }, index=pd.to_datetime(data["t"], unit="s"))
+        return df
+    except Exception as e:
+        print(f"Finnhub candle fallback failed for {ticker}: {e}")
+        return pd.DataFrame()
 
 def fetch_stock_data(
     symbol: str,
     period: str = "2y",
     interval: str = "1d",
 ) -> pd.DataFrame:
-    """Fetch OHLCV data from Yahoo Finance with caching."""
+    """Fetch OHLCV data with multi-layer fallback strategy."""
     ticker = resolve_ticker(symbol)
     cache_key = f"{ticker}_{period}_{interval}"
     now = time.time()
@@ -59,13 +104,42 @@ def fetch_stock_data(
         if now - entry["time"] < CACHE_TTL:
             return entry["df"]
 
-    df = yf.download(ticker, period=period, interval=interval, progress=False)
+    df = None
 
-    if df.empty:
-        raise ValueError(f"No data found for symbol: {symbol} (ticker: {ticker})")
+    # --- Layer 1: YahooQuery (More resilient than yfinance) ---
+    try:
+        yq = YQTicker(ticker, session=_SESSION)
+        # Map period/interval to yahooquery format
+        history = yq.history(period=period, interval=interval)
+        if not history.empty:
+            if isinstance(history.index, pd.MultiIndex):
+                df = history.xs(ticker)
+            else:
+                df = history
+    except Exception as e:
+        print(f"YahooQuery failed for {ticker}: {e}")
+
+    # --- Layer 2: yfinance Fallback ---
+    if df is None or df.empty:
+        try:
+            _SESSION.headers.update(get_random_headers())
+            df = yf.download(ticker, period=period, interval=interval, progress=False, session=_SESSION)
+        except Exception as e:
+            print(f"yfinance fallback failed for {ticker}: {e}")
+
+    # --- Layer 3: Finnhub Candles (Fail-Soft) ---
+    if df is None or df.empty:
+        print(f"All Yahoo sources blocked for {ticker}. Attempting Finnhub failover...")
+        df = fetch_finnhub_candles(ticker)
+        # Handle Indian stocks suffix for Finnhub if needed
+        if (df is None or df.empty) and "." in ticker:
+            df = fetch_finnhub_candles(ticker.split(".")[0])
+
+    if df is None or df.empty:
+        raise ValueError(f"CRITICAL: Too Many Requests. Both Yahoo and Finnhub are temporarily unavailable for {symbol}. Try again in 5 minutes.")
 
     # Flatten MultiIndex columns if present
-    if isinstance(df.columns, pd.MultiIndex):
+    if hasattr(df, 'columns') and isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
     df.index = pd.to_datetime(df.index)
@@ -75,9 +149,8 @@ def fetch_stock_data(
     CACHE_DATA[cache_key] = {"df": df, "time": now}
     return df
 
-
 def fetch_stock_info(symbol: str) -> Dict[str, Any]:
-    """Fetch company metadata / stock info with caching."""
+    """Fetch company metadata with caching and multiple sources."""
     ticker = resolve_ticker(symbol)
     now = time.time()
 
@@ -86,27 +159,38 @@ def fetch_stock_info(symbol: str) -> Dict[str, Any]:
         if now - entry["time"] < CACHE_TTL:
             return entry["info"]
 
-    t = yf.Ticker(ticker)
-    info_raw = t.info
-    info = {
-        "name":        info_raw.get("longName", symbol),
-        "sector":      info_raw.get("sector", "N/A"),
-        "industry":    info_raw.get("industry", "N/A"),
-        "market_cap":  info_raw.get("marketCap", None),
-        "currency":    info_raw.get("currency", "INR"),
-        "description": info_raw.get("longBusinessSummary", "")[:300],
-        "fiftyTwoWeekHigh": info_raw.get("fiftyTwoWeekHigh", None),
-        "fiftyTwoWeekLow":  info_raw.get("fiftyTwoWeekLow", None),
-        "pe_ratio":    info_raw.get("trailingPE", None),
-    }
+    # Try Finnhub first for metadata (rarely rate-limited)
+    info = {}
+    try:
+        url = f"https://finnhub.io/api/v1/stock/profile2?symbol={ticker}&token={FINNHUB_API_KEY}"
+        data = requests.get(url, timeout=5).json()
+        if data:
+            info = {
+                "name": data.get("name", symbol),
+                "sector": data.get("finnhubIndustry", "N/A"),
+                "currency": data.get("currency", "INR"),
+                "market_cap": data.get("marketCapitalization", 0) * 1000000,
+            }
+    except: pass
+
+    # Supplement/Fallback with YFinance
+    try:
+        t = yf.Ticker(ticker, session=_SESSION)
+        yinfo = t.info
+        info.update({
+            "industry": yinfo.get("industry", info.get("sector", "N/A")),
+            "description": yinfo.get("longBusinessSummary", "")[:300],
+            "fiftyTwoWeekHigh": yinfo.get("fiftyTwoWeekHigh"),
+            "fiftyTwoWeekLow": yinfo.get("fiftyTwoWeekLow"),
+            "pe_ratio": yinfo.get("trailingPE"),
+            "regularMarketPrice": yinfo.get("regularMarketPrice")
+        })
+    except: pass
     
-    # Save to cache
     CACHE_INFO[ticker] = {"info": info, "time": now}
     return info
 
-
 def df_to_json_records(df: pd.DataFrame) -> list:
-    """Convert DataFrame to JSON-serializable list of records."""
     df_copy = df.copy()
     df_copy.index = df_copy.index.strftime("%Y-%m-%d")
     return df_copy.reset_index().rename(columns={"index": "date"}).to_dict(orient="records")

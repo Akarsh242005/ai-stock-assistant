@@ -277,7 +277,7 @@ function parseCombinedData(res, disp) {
     exch: info.exchangeName || 'NSE', h52: info.fiftyTwoWeekHigh, l52: info.fiftyTwoWeekLow, sym: disp,
     rsi: c.rsi, macd: { line: c.macd_line, signal: c.macd_signal, hist: c.histogram }, bb: { upper: c.bb_upper, lower: c.bb_lower },
     s50: c.sma_50, s200: c.sma_200, atr: +(lp * 0.015).toFixed(2),
-    sig: { s: analysis.signal, score: analysis.score, c: analysis.confidence, reasons: analysis.reasons, r20H: lp*1.05, r20L: lp*0.95 },
+    sig: { s: analysis.signal, verdict: analysis.verdict, score: analysis.score, c: analysis.confidence, reasons: analysis.reasons, r20H: lp*1.05, r20L: lp*0.95 },
     forecast: forecast
   };
   
@@ -349,11 +349,11 @@ function renderDash() {
   var s=D.sig,ac=s.s==='BUY'?'#4ade80':s.s==='SELL'?'#f87171':'#fbbf24';
   document.getElementById('sigbox').innerHTML=
     '<div style="text-align:center;padding:14px 0 16px">'+
-    '<div class="sig s'+s.s+'" style="font-size:20px;padding:11px 30px;margin-bottom:11px">'+
+    '<div class="sig s'+s.s+'" style="font-size:20px;padding:11px 30px;margin-bottom:12px">'+
     (s.s==='BUY'?'▲':s.s==='SELL'?'▼':'—')+' '+s.s+'</div>'+
-    '<div style="font-size:12px;color:var(--mute);margin-bottom:8px">Score: '+
-    (s.score>0?'+':'')+s.score+' &nbsp;·&nbsp; Confidence: '+Math.round(s.c)+'%</div>'+
-    '<div style="font-size:10px;color:var(--mute);margin-bottom:3px">Signal strength</div>'+
+    '<div style="margin-top:10px; margin-bottom:15px; font-size:16px; font-weight:800; color:'+ac+'; text-shadow: 0 0 10px '+ac+'66">'+(s.verdict || '')+'</div>'+
+    '<div style="font-size:12px;color:var(--mute);margin-bottom:8px">Alpha Score: '+
+    (s.score>0?'+':'')+s.score+' &nbsp;·&nbsp; AI Confidence: '+Math.round(s.c)+'%</div>'+
     '<div class="bar"><div class="bfill" style="width:'+Math.round(s.c)+'%;background:'+ac+'"></div></div>'+
     '</div>'+
     '<ul class="reasons">'+(s.reasons||[]).map(function(r){return'<li>'+r+'</li>';}).join('')+'</ul>';
