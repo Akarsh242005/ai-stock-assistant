@@ -6,11 +6,12 @@ scipy
 
 # Stock Data
 yfinance
+yahooquery
 pandas-datareader
 
 # Deep Learning (LSTM) - Using CPU version to save memory
-tensorflow-cpu
-keras
+tensorflow-cpu>=2.16.1
+keras>=3.0
 
 # Time Series Forecasting
 prophet
