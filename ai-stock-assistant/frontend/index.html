@@ -255,8 +255,9 @@ function renderDash(){
   document.getElementById('sig-box').innerHTML = `
     <div style="text-align:center;padding:20px 0">
       <div class="sig s${s.signal}">${s.signal}</div>
+      <div style="margin-top:15px; font-size:17px; font-weight:800; color:${s.color}; text-shadow: 0 0 12px ${s.color}66">${s.verdict}</div>
       <div class="bar"><div class="bfill" style="width:${s.confidence}%;background:${s.color}"></div></div>
-      <p style="font-size:11px;color:var(--mute);margin-top:8px">Alpha Score: ${s.score}</p>
+      <p style="font-size:11px;color:var(--mute);margin-top:8px">AI Analysis Confidence: ${s.confidence}%</p>
     </div>
     <ul class="reasons">${s.reasons.map(r=>`<li>${r}</li>`).join('')}</ul>`;
 

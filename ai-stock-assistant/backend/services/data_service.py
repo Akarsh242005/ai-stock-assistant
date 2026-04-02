@@ -131,11 +131,18 @@ def fetch_stock_data(
                 df = yf.download(ticker, period=period, interval=interval, progress=False)
             except:
                 pass
+
+    if df is None or df.empty:
+        # Final fallback: Try Finnhub Candles (Resistant to Yahoo rate-limiting)
+        print(f"Yahoo blocked {ticker}. Attempting Finnhub candle fallback...")
+        df = fetch_finnhub_candles(ticker)
+        if (df is None or df.empty) and "." in ticker:
+            # Try without suffix for Indian stocks in Finnhub
+            df = fetch_finnhub_candles(ticker.split(".")[0])
             
     if df is None or df.empty:
-        # If we have Finnhub, we might at least want to return a one-row DF with the current price 
-        # but that breaks technical analysis. Better to raise a more informative error.
-        raise ValueError(f"Too Many Requests. Yahoo Finance is temporarily blocking the server (429). Please try again in a few minutes.")
+        # If we reach here, both sources failed. 
+        raise ValueError(f"CRITICAL: Too Many Requests. Both Yahoo and Finnhub are temporarily unavailable for {symbol}. Try again in 5 minutes.")
 
     # Flatten MultiIndex columns if present
     if hasattr(df, 'columns') and isinstance(df.columns, pd.MultiIndex):
@@ -150,6 +157,36 @@ def fetch_stock_data(
     # Save to cache
     _DATA_CACHE[cache_key] = (df, now)
     return df
+
+
+def fetch_finnhub_candles(symbol: str, resolution: str = "D") -> Optional[pd.DataFrame]:
+    """Fetch candle data from Finnhub as a fallback for Yahoo."""
+    if not config.FINNHUB_API_KEY:
+        return None
+    
+    ticker = symbol.upper()
+    # Finnhub requires timestamps
+    to_time = int(time.time())
+    from_time = to_time - (365 * 24 * 60 * 60) # 1 year back
+    
+    try:
+        url = f"https://finnhub.io/api/v1/stock/candle?symbol={ticker}&resolution={resolution}&from={from_time}&to={to_time}&token={config.FINNHUB_API_KEY}"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("s") == "ok":
+                df = pd.DataFrame({
+                    "Close": data["c"],
+                    "High":  data["h"],
+                    "Low":   data["l"],
+                    "Open":  data["o"],
+                    "Volume":data["v"]
+                }, index=pd.to_datetime(data["t"], unit='s'))
+                return df
+    except Exception as e:
+        print(f"Finnhub candle fetch failed for {ticker}: {e}")
+    
+    return None
 
 
 def fetch_finnhub_info(symbol: str) -> Dict[str, Any]:

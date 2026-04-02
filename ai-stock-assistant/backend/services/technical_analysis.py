@@ -143,21 +143,25 @@ def generate_signal(df: pd.DataFrame) -> Dict[str, Any]:
         reasons.append("Price below SMA50 — short-term bearish")
 
     # Determine signal
+    verdict = ""
     if score >= 3:
         signal = "BUY"
         # Scale: 3 -> 80%, 4 -> 87%, 5+ -> 95%
         confidence = min(95, 75 + (score - 2) * 7)
         color = "#00ff88"
+        verdict = "STRONG BULLISH: Indicators suggest a high-probability entry point. Uptrend is well-supported." if score >= 5 else "BULLISH: Positive momentum detected. Good entry for long positions."
     elif score <= -3:
         signal = "SELL"
         # Scale: -3 -> 80%, -4 -> 87%, -5+ -> 95%
         confidence = min(95, 75 + (abs(score) - 2) * 7)
         color = "#ff4466"
+        verdict = "STRONG BEARISH: Multiple indicators suggest a major reversal or crash. Exit or short suggested." if score <= -5 else "BEARISH: Negative momentum building. Consider protecting profits or exiting."
     else:
         signal = "HOLD"
         # Scale: 0 -> 60%, 1 -> 65%, 2 -> 70%
         confidence = 60 + abs(score) * 5
         color = "#ffaa00"
+        verdict = "NEUTRAL: Market is consolidated or sideways. Wait for a clearer breakout before entering."
 
     # Build indicator snapshot
     indicators = {
@@ -198,6 +202,7 @@ def generate_signal(df: pd.DataFrame) -> Dict[str, Any]:
 
     return {
         "signal":     signal,
+        "verdict":    verdict,
         "confidence": round(confidence, 1),
         "score":      score,
         "color":      color,
