@@ -6,6 +6,7 @@ scipy
 
 # Stock Data
 yfinance
+yahooquery
 pandas-datareader
 
 # Deep Learning (LSTM)

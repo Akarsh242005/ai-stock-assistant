@@ -8,10 +8,12 @@ Supports NSE (Indian) and global markets.
 """
 
 import yfinance as yf
+from yahooquery import Ticker as YQTicker
 import pandas as pd
 import numpy as np
 import time
 import requests
+import random
 from typing import Optional, Dict, Any
 import os
 
@@ -20,15 +22,27 @@ try:
 except (ImportError, ValueError):
     import backend.config as config
 
+# User-Agent list for rotation
+_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+    "Mozilla/5.0 (AppleChromebook; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+]
+
+def get_random_headers():
+    return {
+        "User-Agent": random.choice(_USER_AGENTS),
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Origin": "https://finance.yahoo.com",
+        "Referer": "https://finance.yahoo.com"
+    }
+
 # Create a session with custom headers to prevent rate limits
 _SESSION = requests.Session()
-_SESSION.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Accept": "*/*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Origin": "https://finance.yahoo.com",
-    "Referer": "https://finance.yahoo.com"
-})
+_SESSION.headers.update(get_random_headers())
 
 # In-memory cache to prevent rate limiting
 _DATA_CACHE = {}
@@ -88,24 +102,40 @@ def fetch_stock_data(
             return data
 
     ticker = resolve_ticker(symbol)
+    df = None
     
+    # --- Try YahooQuery first (often more stealthy on cloud IPs) ---
     try:
-        # Use session to bypass rate limits
-        df = yf.download(ticker, period=period, interval=interval, progress=False, session=_SESSION)
+        yq = YQTicker(ticker, session=_SESSION)
+        # Map period/interval to yahooquery format
+        history = yq.history(period=period, interval=interval)
+        if not history.empty:
+            # yahooquery returns a multi-index (symbol, date)
+            if isinstance(history.index, pd.MultiIndex):
+                df = history.xs(ticker)
+            else:
+                df = history
     except Exception as e:
-        # Fallback without session if session causes issues
-        df = yf.download(ticker, period=period, interval=interval, progress=False)
+        print(f"YahooQuery failed for {ticker}: {e}")
 
+    # --- Fallback to yfinance if YahooQuery failed ---
     if df is None or df.empty:
-        # One last try with a fresh session
         try:
-            temp_session = requests.Session()
-            df = yf.download(ticker, period=period, interval=interval, progress=False, session=temp_session)
-        except:
-            pass
+            # Refresh session headers for local rotation
+            _SESSION.headers.update(get_random_headers())
+            df = yf.download(ticker, period=period, interval=interval, progress=False, session=_SESSION)
+        except Exception as e:
+            print(f"yfinance fallback failed for {ticker}: {e}")
+            # Final try without session
+            try:
+                df = yf.download(ticker, period=period, interval=interval, progress=False)
+            except:
+                pass
             
     if df is None or df.empty:
-        raise ValueError(f"No data found for symbol: {symbol} (ticker: {ticker}). Yahoo Finance may be blocking the request.")
+        # If we have Finnhub, we might at least want to return a one-row DF with the current price 
+        # but that breaks technical analysis. Better to raise a more informative error.
+        raise ValueError(f"Too Many Requests. Yahoo Finance is temporarily blocking the server (429). Please try again in a few minutes.")
 
     # Flatten MultiIndex columns if present
     if hasattr(df, 'columns') and isinstance(df.columns, pd.MultiIndex):
