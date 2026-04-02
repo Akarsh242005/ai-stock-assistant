@@ -10,9 +10,8 @@ yahooquery
 pandas-datareader
 
 # Deep Learning (LSTM)
-# TensorFlow currently lacks 3.13 wheels for 2.x in standard pypi; we'll see if it installs.
-tensorflow>=2.16.1
-keras>=3.0
+tensorflow==2.15.0
+keras==2.15.0
 
 # Time Series Forecasting
 prophet

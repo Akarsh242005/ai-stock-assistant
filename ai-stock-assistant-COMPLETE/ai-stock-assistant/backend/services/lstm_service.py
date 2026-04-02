@@ -107,9 +107,17 @@ def train_and_predict(
     model_path = os.path.join(MODEL_DIR, f"lstm_{symbol.replace('.', '_')}.h5")
 
     if use_cache and os.path.exists(model_path):
-        model = load_model(model_path)
+        try:
+            model = load_model(model_path)
+        except Exception as e:
+            print(f"Error loading LSTM model for {symbol}: {e}. Re-training...")
+            model = build_lstm_model(WINDOW_SIZE)
+            _should_train = True
     else:
         model = build_lstm_model(WINDOW_SIZE)
+        _should_train = True
+
+    if _should_train:
         early_stop = EarlyStopping(monitor="val_loss", patience=3, restore_best_weights=True)
         model.fit(
             X_train, y_train,
