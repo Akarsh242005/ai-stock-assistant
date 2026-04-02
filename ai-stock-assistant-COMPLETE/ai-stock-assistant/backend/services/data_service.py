@@ -19,7 +19,14 @@ import random
 from functools import lru_cache
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
-from backend.config import FINNHUB_API_KEY
+
+try:
+    from backend.config import FINNHUB_API_KEY
+except ImportError:
+    try:
+        from config import FINNHUB_API_KEY
+    except ImportError:
+        FINNHUB_API_KEY = None
 
 # Rotating User Agents to prevent Yahoo blocks
 USER_AGENTS = [

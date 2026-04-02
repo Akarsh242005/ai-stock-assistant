@@ -44,3 +44,6 @@ DATA_DIR.mkdir(exist_ok=True)
 
 # ── Logging ───────────────────────────────────────────────
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# ── API Keys ──────────────────────────────────────────────
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
