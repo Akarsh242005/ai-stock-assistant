@@ -41,11 +41,18 @@ def get_combined_analysis(symbol: str, period: str = Query("2y")):
         def calc_accuracy(mape):
             return max(0, min(100, 100 - float(mape)))
 
-        lstm_result["accuracy_score"] = round(calc_accuracy(lstm_result["metrics"]["mape"]), 2)
-        prophet_result["accuracy_score"] = round(calc_accuracy(prophet_result["metrics"]["mape"]), 2)
-        arima_result["accuracy_score"] = round(calc_accuracy(arima_result["metrics"]["mape"]), 2)
+        if "metrics" in lstm_result and "mape" in lstm_result["metrics"]:
+            lstm_result["accuracy_score"] = round(calc_accuracy(lstm_result["metrics"]["mape"]), 2)
+        if "metrics" in prophet_result and "mape" in prophet_result["metrics"]:
+            prophet_result["accuracy_score"] = round(calc_accuracy(prophet_result["metrics"]["mape"]), 2)
+        if "metrics" in arima_result and "mape" in arima_result["metrics"]:
+            arima_result["accuracy_score"] = round(calc_accuracy(arima_result["metrics"]["mape"]), 2)
 
-        directions = [lstm_result["direction"], prophet_result["direction"], arima_result["direction"]]
+        directions = [
+            lstm_result.get("direction", "HOLD"), 
+            prophet_result.get("direction", "HOLD"), 
+            arima_result.get("direction", "HOLD")
+        ]
         up_count = directions.count("UP")
         
         ensemble_direction = "HOLD"
