@@ -44,6 +44,14 @@ def compute_moving_averages(close: pd.Series) -> Dict[str, pd.Series]:
         "sma_200": close.rolling(200).mean(),
     }
 
+def compute_atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+    """Calculate Average True Range (ATR) for volatility-based Stop Loss."""
+    tr1 = (high - low).abs()
+    tr2 = (high - close.shift()).abs()
+    tr3 = (low - close.shift()).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    return tr.rolling(period).mean()
+
 # ─── Signal Generation ────────────────────────────────────
 
 def generate_signal(df: pd.DataFrame) -> Dict[str, Any]:
@@ -116,6 +124,30 @@ def generate_signal(df: pd.DataFrame) -> Dict[str, Any]:
         color = "#ffaa00"
         verdict = "NEUTRAL: Market is consolidated or sideways. Wait for a clearer breakout."
 
+    # --- EXPERT FEATURE: Risk Guard Setup ---
+    atr_series = compute_atr(df["High"], df["Low"], df["Close"])
+    atr_val = float(atr_series.iloc[-1])
+    
+    trade_setup = None
+    if signal == "BUY":
+        stop_loss = close_val - (1.5 * atr_val)
+        target = close_val + (3.0 * atr_val)
+        trade_setup = {
+            "entry": round(close_val, 2),
+            "stop_loss": round(stop_loss, 2),
+            "target": round(target, 2),
+            "risk_reward": "1:2 (Good Risk Management)"
+        }
+    elif signal == "SELL":
+        stop_loss = close_val + (1.5 * atr_val)
+        target = close_val - (3.0 * atr_val)
+        trade_setup = {
+            "entry": round(close_val, 2),
+            "stop_loss": round(stop_loss, 2),
+            "target": round(target, 2),
+            "risk_reward": "1:2 (Good Risk Management)"
+        }
+
     indicators = {
         "rsi": round(rsi_val, 2),
         "macd": round(macd_val, 4),
@@ -125,6 +157,7 @@ def generate_signal(df: pd.DataFrame) -> Dict[str, Any]:
         "sma_50":   round(sma50, 2),
         "sma_200":  round(sma200, 2),
         "close":    round(close_val, 2),
+        "atr":      round(atr_val, 2),
     }
 
     tail = df.tail(100).copy()
@@ -146,6 +179,7 @@ def generate_signal(df: pd.DataFrame) -> Dict[str, Any]:
     return {
         "signal":     signal,
         "verdict":    verdict,
+        "trade_setup": trade_setup,
         "confidence": round(confidence, 1),
         "score":      score,
         "color":      color,

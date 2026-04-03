@@ -227,6 +227,8 @@ function qs(s){document.getElementById('sym').value=s;go();}
 function dsp(id,v){var e=document.getElementById(id);if(e)e.style.display=v;}
 function setBtn(on){var b=document.getElementById('gbtn');b.disabled=!on;b.textContent=on?'▶ Analyze Live':'Loading...';}
 
+const BACKEND_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://ai-stock-assistant-2.onrender.com';
+
 function go(retryCount = 0){
   var raw=document.getElementById('sym').value.trim();
   if(!raw)return;
@@ -236,24 +238,26 @@ function go(retryCount = 0){
   setBtn(false);
   document.getElementById('lmsg').textContent=(retryCount > 0 ? 'Retrying (Attempt '+retryCount+')...' : 'Fetching AI analysis for '+raw.toUpperCase()+'...');
   
-  const BACKEND_URL = 'https://ai-stock-assistant-2.onrender.com';
-  
-  fetch(BACKEND_URL + '/api/combined/' + tk)
-  .then(r => {
-    if (r.status === 429 || r.status === 500) {
-       if (retryCount < 2) {
-         setTimeout(() => go(retryCount + 1), 3000);
-         return null;
-       }
-    }
-    return r.json();
-  })
-  .then(function(res) {
-    if (!res) return; // Handled by retry
+  Promise.all([
+    fetch(BACKEND_URL + '/api/combined/' + tk).then(r => {
+      if (r.status === 429 || r.status === 500) throw new Error("Retry");
+      return r.json();
+    }),
+    fetch(BACKEND_URL + '/api/sentiment/' + tk).then(r => r.ok ? r.json() : null).catch(() => null)
+  ])
+  .then(function(results) {
+    var res = results[0];
+    var sentimentRes = results[1];
+    if (!res) return;
     if(res.detail) throw new Error(res.detail);
+    res.sentiment_data = sentimentRes;
     parseCombinedData(res, raw.toUpperCase());
   })
   .catch(function(e) {
+    if (e.message === "Retry" && retryCount < 2) {
+      setTimeout(() => go(retryCount + 1), 3000);
+      return;
+    }
     dsp('d-load','none');
     showErr(raw.toUpperCase(), e.message);
     setBtn(true);
@@ -278,6 +282,9 @@ function parseCombinedData(res, disp) {
     rsi: c.rsi, macd: { line: c.macd_line, signal: c.macd_signal, hist: c.histogram }, bb: { upper: c.bb_upper, lower: c.bb_lower },
     s50: c.sma_50, s200: c.sma_200, atr: +(lp * 0.015).toFixed(2),
     sig: { s: analysis.signal, verdict: analysis.verdict, score: analysis.score, c: analysis.confidence, reasons: analysis.reasons, r20H: lp*1.05, r20L: lp*0.95 },
+    ensemble: res.ensemble || {},
+    setup: analysis.trade_setup,
+    sentiment: res.sentiment_data || {},
     forecast: forecast
   };
   
@@ -325,13 +332,15 @@ function bo(yCb) {
 
 function renderDash() {
   var cc=D.chg>=0?'#4ade80':'#f87171';
+  var ens_c = D.ensemble.verdict && D.ensemble.verdict.indexOf('DOWN')>-1 ? '#f87171' : D.ensemble.verdict && D.ensemble.verdict.indexOf('UP')>-1 ? '#4ade80' : '#fbbf24';
+  var sen_c = D.sentiment.verdict === 'BULLISH' ? '#4ade80' : D.sentiment.verdict === 'BEARISH' ? '#f87171' : '#fbbf24';
+
   document.getElementById('scards').innerHTML=
     sc('Live Price '+(D.chg>=0?'▲':'▼'),fmt(D.lp),
        (D.chg>=0?'+':'')+fmt(D.chg)+' ('+D.chgp+'%) today',cc)+
-    sc('Signal',D.sig.s,Math.round(D.sig.c)+'% confidence',
-       D.sig.s==='BUY'?'#4ade80':D.sig.s==='SELL'?'#f87171':'#fbbf24')+
-    sc('52W Range',fmt(D.h52),'Low: '+fmt(D.l52),'#94a3b8')+
-    sc('Exchange',D.exch,D.name,'#94a3b8');
+    sc('Master Verdict', D.ensemble.verdict || D.sig.s, Math.round(D.ensemble.confidence || D.sig.c)+'% consensus', ens_c)+
+    sc('Sentiment Pulse', D.sentiment.verdict || 'NEUTRAL', D.sentiment.score ? D.sentiment.score+' Alpha Score' : 'Processing...', sen_c)+
+    sc('52W Range',fmt(D.h52),'Low: '+fmt(D.l52),'#94a3b8');
 
   kc('c-px');
   CH['c-px']=new Chart(document.getElementById('c-px'),{
@@ -347,6 +356,18 @@ function renderDash() {
         callback:function(v){return fmt(v);}},grid:{color:'rgba(255,255,255,.04)'},border:{display:false}}}}});
 
   var s=D.sig,ac=s.s==='BUY'?'#4ade80':s.s==='SELL'?'#f87171':'#fbbf24';
+  var setupHtml = '';
+  if (D.setup) {
+    setupHtml = '<div class="hint" style="margin-top:16px;text-align:left;background:rgba(34,211,238,.03);border-color:rgba(34,211,238,.2)">'+
+                '<div style="font-weight:700;margin-bottom:12px;font-size:12px;color:var(--acc);letter-spacing:.5px;text-transform:uppercase">🛡️ Expert Trade Setup</div>'+
+                '<div class="g4" style="margin-bottom:0">'+
+                '<div><div class="clbl">Entry Limit</div><div class="pv" style="font-size:15px">'+fmt(D.setup.entry)+'</div></div>'+
+                '<div><div class="clbl">Stop-Loss (ATR)</div><div class="pv" style="font-size:15px;color:#f87171">'+fmt(D.setup.stop_loss)+'</div></div>'+
+                '<div><div class="clbl">Target</div><div class="pv" style="font-size:15px;color:#4ade80">'+fmt(D.setup.target)+'</div></div>'+
+                '<div><div class="clbl">Risk:Reward</div><div class="pv" style="font-size:12px;color:#fbbf24;margin-top:2px">'+D.setup.risk_reward+'</div></div>'+
+                '</div></div>';
+  }
+
   document.getElementById('sigbox').innerHTML=
     '<div style="text-align:center;padding:14px 0 16px">'+
     '<div class="sig s'+s.s+'" style="font-size:20px;padding:11px 30px;margin-bottom:12px">'+
@@ -355,6 +376,7 @@ function renderDash() {
     '<div style="font-size:12px;color:var(--mute);margin-bottom:8px">Alpha Score: '+
     (s.score>0?'+':'')+s.score+' &nbsp;·&nbsp; AI Confidence: '+Math.round(s.c)+'%</div>'+
     '<div class="bar"><div class="bfill" style="width:'+Math.round(s.c)+'%;background:'+ac+'"></div></div>'+
+    setupHtml + 
     '</div>'+
     '<ul class="reasons">'+(s.reasons||[]).map(function(r){return'<li>'+r+'</li>';}).join('')+'</ul>';
 }
@@ -456,6 +478,28 @@ function pg(cls,items){
       '<div class="pv '+cls+'">'+x[1]+'</div></div>';
   }).join('')+'</div>';
 }
+
+function loadScreener() {
+  var url = BACKEND_URL + '/api/screener';
+  fetch(url).then(function(r) { return r.json(); }).then(function(res) {
+    if (!res || !res.picks || !res.picks.length) return;
+    var html = '<div class="g2" style="margin-top:20px;text-align:left">';
+    res.picks.forEach(function(p) {
+       html += '<div class="qc" style="display:flex;justify-content:space-between;padding:14px 18px;border-radius:12px;margin-bottom:4px;border:1px solid var(--bdr);background:var(--s);cursor:pointer;transition:all 0.2s" onmouseover="this.style.borderColor=\'var(--acc)\'" onmouseout="this.style.borderColor=\'var(--bdr)\'" onclick="qs(\''+p.symbol+'\')">' +
+               '<div><strong style="color:var(--txt);font-size:15px;font-family:\'Space Mono\',monospace">'+p.symbol+'</strong><br><span style="color:var(--mute);font-size:12px;margin-top:4px;display:block">'+fmt(p.current_price)+'</span></div>'+
+               '<div style="text-align:right"><strong style="color:'+(p.signal==='BUY'?'#4ade80':'#f87171')+';font-size:15px;letter-spacing:1px">'+p.signal+'</strong><br><span style="color:var(--mute);font-size:11px">'+Math.round(p.confidence)+'% AI Conf</span></div>'+
+               '</div>';
+    });
+    html += '</div>';
+    var d0 = document.getElementById('d0');
+    d0.innerHTML = d0.innerHTML + '<div style="margin-top:40px;border-top:1px dashed var(--bdr);padding-top:30px">' + 
+                   '<h4 style="color:var(--acc);margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:15px;text-transform:uppercase;letter-spacing:1px">🚨 Live AI Top Picks Screener</h4>' + html + '</div>';
+  }).catch(function(e){
+    console.log("Screener scan error", e);
+  });
+}
+window.onload = loadScreener;
+
 </script>
 </body>
 </html>

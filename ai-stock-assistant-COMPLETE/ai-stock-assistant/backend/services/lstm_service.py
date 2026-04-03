@@ -39,30 +39,35 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 
 def prepare_sequences(data: np.ndarray, window: int):
     """
-    Create sliding-window sequences for LSTM training.
-
+    Create sliding-window sequences for Multi-Variate LSTM training.
+    
+    Args:
+        data: shape (n_samples, n_features)
     Returns:
-        X: shape (n_samples, window, 1)
-        y: shape (n_samples,)
+        X: shape (n_samples, window, n_features)
+        y: Close price target (1st column)
     """
     X, y = [], []
     for i in range(window, len(data)):
-        X.append(data[i - window:i, 0])
-        y.append(data[i, 0])
-    return np.array(X).reshape(-1, window, 1), np.array(y)
+        X.append(data[i - window:i, :])
+        y.append(data[i, 0]) # Target is always Close
+    return np.array(X), np.array(y)
 
 
-def build_lstm_model(window: int) -> "Sequential":
-    """Build and compile LSTM model."""
+def build_lstm_model(window: int, n_features: int = 3) -> "Sequential":
+    """Build and compile a robust Multi-Variate LSTM model."""
+    from tensorflow.keras.layers import BatchNormalization
     model = Sequential([
-        LSTM(128, return_sequences=True, input_shape=(window, 1)),
+        LSTM(128, return_sequences=True, input_shape=(window, n_features)),
+        BatchNormalization(),
         Dropout(0.2),
         LSTM(64, return_sequences=False),
+        BatchNormalization(),
         Dropout(0.2),
-        Dense(32, activation="relu"),
+        Dense(64, activation="relu"),
         Dense(1),
     ])
-    model.compile(optimizer="adam", loss="mean_squared_error")
+    model.compile(optimizer="adam", loss="huber_loss") # Huber is robust to stock price spikes
     return model
 
 
@@ -73,48 +78,50 @@ def train_and_predict(
     use_cache: bool = True,
 ) -> dict:
     """
-    Train LSTM on historical close prices and forecast next days.
-
-    Args:
-        df:        DataFrame with 'Close' column
-        symbol:    Stock symbol (used for model caching)
-        epochs:    Training epochs (lower = faster, less accurate)
-        use_cache: Load saved model weights if available
-
-    Returns:
-        dict with predictions, actuals, metrics, and forecast
+    Train Multi-Variate LSTM on Close + Volume + RSI.
     """
     if not TF_AVAILABLE:
         return _fallback_prediction(df, symbol)
 
-    close = df["Close"].values.reshape(-1, 1)
+    # --- Feature Engineering ---
+    df_feat = df.copy()
+    
+    # Calculate RSI (14 period)
+    import pandas_ta as ta
+    df_feat['RSI'] = ta.rsi(df_feat['Close'], length=14)
+    df_feat['RSI'].fillna(50, inplace=True) # Neutral fill
+    
+    # Select features: Close (Target), Volume, RSI
+    features = ['Close', 'Volume', 'RSI']
+    data = df_feat[features].values
 
-    # ── Scale ─────────────────────────────────────────────
+    # --- Scale ---
     scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled = scaler.fit_transform(close)
+    scaled = scaler.fit_transform(data)
 
-    # ── Train / Test split (80/20) ─────────────────────────
-    split    = int(len(scaled) * 0.8)
-    train    = scaled[:split]
-    test     = scaled[split:]
+    # --- Train / Test split ---
+    split = int(len(scaled) * 0.8)
+    train = scaled[:split]
+    test  = scaled[split:]
 
     X_train, y_train = prepare_sequences(train, WINDOW_SIZE)
     # For test we need window rows from training tail
-    test_input       = scaled[split - WINDOW_SIZE:]
-    X_test,  y_test  = prepare_sequences(test_input, WINDOW_SIZE)
+    test_input = scaled[split - WINDOW_SIZE:]
+    X_test, y_test = prepare_sequences(test_input, WINDOW_SIZE)
 
-    # ── Model ─────────────────────────────────────────────
-    model_path = os.path.join(MODEL_DIR, f"lstm_{symbol.replace('.', '_')}.h5")
+    # --- Model ---
+    model_path = os.path.join(MODEL_DIR, f"lstm_mv_{symbol.replace('.', '_')}.h5")
+    _should_train = False
 
     if use_cache and os.path.exists(model_path):
         try:
             model = load_model(model_path)
         except Exception as e:
             print(f"Error loading LSTM model for {symbol}: {e}. Re-training...")
-            model = build_lstm_model(WINDOW_SIZE)
+            model = build_lstm_model(WINDOW_SIZE, n_features=len(features))
             _should_train = True
     else:
-        model = build_lstm_model(WINDOW_SIZE)
+        model = build_lstm_model(WINDOW_SIZE, n_features=len(features))
         _should_train = True
 
     if _should_train:
@@ -129,58 +136,73 @@ def train_and_predict(
         )
         model.save(model_path)
 
-    # ── Test predictions ──────────────────────────────────
+    # --- Test predictions ---
     pred_scaled = model.predict(X_test, verbose=0)
-    predictions = scaler.inverse_transform(pred_scaled).flatten()
-    actuals     = scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
+    
+    # Inverse Scale - only the Close price (column 0)
+    # Create dummy array to inverse scale correctly
+    dummy_pred = np.zeros((len(pred_scaled), len(features)))
+    dummy_pred[:, 0] = pred_scaled.flatten()
+    predictions = scaler.inverse_transform(dummy_pred)[:, 0]
 
-    # ── Metrics ───────────────────────────────────────────
+    dummy_actual = np.zeros((len(y_test), len(features)))
+    dummy_actual[:, 0] = y_test.flatten()
+    actuals = scaler.inverse_transform(dummy_actual)[:, 0]
+
+    # --- Metrics ---
     rmse = math.sqrt(mean_squared_error(actuals, predictions))
-    mae  = mean_absolute_error(actuals, predictions)
-    mape = np.mean(np.abs((actuals - predictions) / actuals)) * 100
+    mae = mean_absolute_error(actuals, predictions)
+    mape = np.mean(np.abs((actuals - predictions) / (actuals + 1e-9))) * 100
 
-    # ── Future Forecast ───────────────────────────────────
+    # --- Future Forecast ---
     last_window = scaled[-WINDOW_SIZE:]
     forecast = []
-    current  = last_window.copy()
+    current = last_window.copy()
 
     for _ in range(FORECAST_DAYS):
-        x_pred = current.reshape(1, WINDOW_SIZE, 1)
-        next_s = model.predict(x_pred, verbose=0)[0, 0]
-        forecast.append(next_s)
-        current = np.append(current[1:], [[next_s]], axis=0)
+        x_pred = current.reshape(1, WINDOW_SIZE, len(features))
+        next_s_scaled = model.predict(x_pred, verbose=0)[0, 0]
+        
+        # We only predict Close, so we hold other features constant for simplifaction in live forecast
+        # or we could use the last known Volume/RSI. Here we take the last row and update Close.
+        new_row = current[-1].copy()
+        new_row[0] = next_s_scaled
+        forecast.append(next_s_scaled)
+        current = np.append(current[1:], [new_row], axis=0)
 
-    forecast_prices = scaler.inverse_transform(
-        np.array(forecast).reshape(-1, 1)
-    ).flatten()
+    # Inverse scale forecast
+    dummy_f = np.zeros((len(forecast), len(features)))
+    dummy_f[:, 0] = forecast
+    forecast_prices = scaler.inverse_transform(dummy_f)[:, 0]
 
-    # ── Date indices for frontend ─────────────────────────
-    test_dates  = df.index[split:].strftime("%Y-%m-%d").tolist()
+    # --- Date indices for frontend ---
+    test_dates = df.index[split:].strftime("%Y-%m-%d").tolist()
     if len(test_dates) > len(predictions):
         test_dates = test_dates[:len(predictions)]
 
-    last_date    = pd.to_datetime(df.index[-1])
+    last_date = pd.to_datetime(df.index[-1])
     future_dates = pd.bdate_range(start=last_date + pd.Timedelta(days=1),
                                   periods=FORECAST_DAYS).strftime("%Y-%m-%d").tolist()
 
-    direction = "UP" if forecast_prices[-1] > close[-1][0] else "DOWN"
-    pct_change = ((forecast_prices[-1] - close[-1][0]) / close[-1][0]) * 100
+    current_price = float(df["Close"].iloc[-1])
+    direction = "UP" if forecast_prices[-1] > current_price else "DOWN"
+    pct_change = ((forecast_prices[-1] - current_price) / current_price) * 100
 
     return {
-        "model":        "LSTM",
-        "test_dates":   test_dates,
-        "actuals":      [round(float(v), 2) for v in actuals[:len(test_dates)]],
-        "predictions":  [round(float(v), 2) for v in predictions[:len(test_dates)]],
+        "model": "Multi-Variate LSTM (P+V+RSI)",
+        "test_dates": test_dates,
+        "actuals": [round(float(v), 2) for v in actuals[:len(test_dates)]],
+        "predictions": [round(float(v), 2) for v in predictions[:len(test_dates)]],
         "forecast_dates": future_dates,
-        "forecast":     [round(float(v), 2) for v in forecast_prices],
+        "forecast": [round(float(v), 2) for v in forecast_prices],
         "metrics": {
             "rmse": round(rmse, 4),
-            "mae":  round(mae, 4),
+            "mae": round(mae, 4),
             "mape": round(mape, 2),
         },
-        "direction":    direction,
-        "pct_change":   round(pct_change, 2),
-        "current_price": round(float(close[-1][0]), 2),
+        "direction": direction,
+        "pct_change": round(pct_change, 2),
+        "current_price": round(current_price, 2),
     }
 
 
