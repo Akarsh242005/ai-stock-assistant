@@ -33,15 +33,10 @@ FORECAST_DAYS = 7
 def forecast_with_prophet(df: pd.DataFrame, symbol: str) -> dict:
     """
     Train Prophet model on stock data and generate forecast.
-
-    Args:
-        df:     DataFrame with DatetimeIndex and 'Close' column
-        symbol: Stock ticker for display
-
-    Returns:
-        Forecast dict compatible with frontend chart format
     """
-    if not PROPHET_AVAILABLE:
+    try:
+        from prophet import Prophet
+    except ImportError:
         return _fallback_forecast(df, symbol)
 
     # ── Prepare Prophet format: ds, y ─────────────────────
@@ -60,7 +55,7 @@ def forecast_with_prophet(df: pd.DataFrame, symbol: str) -> dict:
         yearly_seasonality=True,
         weekly_seasonality=True,
         daily_seasonality=False,
-        changepoint_prior_scale=0.05,   # Less flexible = less overfitting
+        changepoint_prior_scale=0.05,
         seasonality_mode="multiplicative",
     )
 

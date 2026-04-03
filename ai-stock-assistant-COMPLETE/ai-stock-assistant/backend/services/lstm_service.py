@@ -21,14 +21,7 @@ import os
 import joblib
 import json
 
-# ─── Try importing TensorFlow ─────────────────────────────
-try:
-    from tensorflow.keras.models import Sequential, load_model
-    from tensorflow.keras.layers import LSTM, Dense, Dropout
-    from tensorflow.keras.callbacks import EarlyStopping
-    TF_AVAILABLE = True
-except ImportError:
-    TF_AVAILABLE = False
+# TF is loaded dynamically to prevent boot timeout
 
 
 WINDOW_SIZE   = 60    # Look-back days

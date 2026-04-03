@@ -21,14 +21,7 @@ import os
 import joblib
 import json
 
-# ─── Try importing TensorFlow ─────────────────────────────
-try:
-    from tensorflow.keras.models import Sequential, load_model
-    from tensorflow.keras.layers import LSTM, Dense, Dropout
-    from tensorflow.keras.callbacks import EarlyStopping
-    TF_AVAILABLE = True
-except ImportError:
-    TF_AVAILABLE = False
+# TF is loaded dynamically to prevent boot timeout
 
 
 WINDOW_SIZE   = 60    # Look-back days
@@ -52,40 +45,25 @@ def prepare_sequences(data: np.ndarray, window: int):
     return np.array(X).reshape(-1, window, 1), np.array(y)
 
 
-def build_lstm_model(window: int) -> "Sequential":
-    """Build and compile LSTM model."""
-    model = Sequential([
-        LSTM(128, return_sequences=True, input_shape=(window, 1)),
-        Dropout(0.2),
-        LSTM(64, return_sequences=False),
-        Dropout(0.2),
-        Dense(32, activation="relu"),
-        Dense(1),
-    ])
-    model.compile(optimizer="adam", loss="mean_squared_error")
-    return model
-
-
-def train_and_predict(
-    df: pd.DataFrame,
-    symbol: str,
-    epochs: int = 20,
-    use_cache: bool = True,
-) -> dict:
-    """
-    Train LSTM on historical close prices and forecast next days.
-
-    Args:
-        df:        DataFrame with 'Close' column
-        symbol:    Stock symbol (used for model caching)
-        epochs:    Training epochs (lower = faster, less accurate)
-        use_cache: Load saved model weights if available
-
-    Returns:
-        dict with predictions, actuals, metrics, and forecast
-    """
-    if not TF_AVAILABLE:
+    try:
+        from tensorflow.keras.models import Sequential, load_model
+        from tensorflow.keras.layers import LSTM, Dense, Dropout
+        from tensorflow.keras.callbacks import EarlyStopping
+    except ImportError:
         return _fallback_prediction(df, symbol)
+
+    def build_lstm_model(window: int) -> "Sequential":
+        """Build and compile LSTM model."""
+        model = Sequential([
+            LSTM(128, return_sequences=True, input_shape=(window, 1)),
+            Dropout(0.2),
+            LSTM(64, return_sequences=False),
+            Dropout(0.2),
+            Dense(32, activation="relu"),
+            Dense(1),
+        ])
+        model.compile(optimizer="adam", loss="mean_squared_error")
+        return model
 
     close = df["Close"].values.reshape(-1, 1)
 
