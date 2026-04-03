@@ -93,6 +93,13 @@ canvas{max-width:100%}
   <button class="gbtn" id="gbtn" onclick="go()">▶ Analyze Live</button>
   <button class="cvbtn" onclick="swTab('cv')">📸 CALL/PUT Signal</button>
 </div>
+
+<!-- PERMANENT LIVE SCREENER -->
+<div id="top-screener" style="background:var(--s);border-bottom:1px solid var(--bdr);padding:10px 16px;display:none;align-items:center;gap:12px;overflow-x:auto;white-space:nowrap">
+  <div style="font-size:11px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:1px;flex-shrink:0"><span class="spin" style="width:10px;height:10px;border-width:1px;margin-right:6px;vertical-align:middle"></span> Live AI Picks:</div>
+  <div id="screener-items" style="display:flex;gap:12px"></div>
+</div>
+
 <div class="tabs">
   <div class="tab on" id="t-dash" onclick="swTab('dash',this)">📊 Dashboard</div>
   <div class="tab" id="t-ta" onclick="swTab('ta',this)">📈 Technicals</div>
@@ -480,22 +487,24 @@ function pg(cls,items){
 }
 
 function loadScreener() {
+  document.getElementById('top-screener').style.display = 'flex';
   var url = BACKEND_URL + '/api/screener';
   fetch(url).then(function(r) { return r.json(); }).then(function(res) {
-    if (!res || !res.picks || !res.picks.length) return;
-    var html = '<div class="g2" style="margin-top:20px;text-align:left">';
+    if (!res || !res.picks || !res.picks.length) {
+      document.getElementById('top-screener').style.display = 'none';
+      return;
+    }
+    var html = '';
     res.picks.forEach(function(p) {
-       html += '<div class="qc" style="display:flex;justify-content:space-between;padding:14px 18px;border-radius:12px;margin-bottom:4px;border:1px solid var(--bdr);background:var(--s);cursor:pointer;transition:all 0.2s" onmouseover="this.style.borderColor=\'var(--acc)\'" onmouseout="this.style.borderColor=\'var(--bdr)\'" onclick="qs(\''+p.symbol+'\')">' +
-               '<div><strong style="color:var(--txt);font-size:15px;font-family:\'Space Mono\',monospace">'+p.symbol+'</strong><br><span style="color:var(--mute);font-size:12px;margin-top:4px;display:block">'+fmt(p.current_price)+'</span></div>'+
-               '<div style="text-align:right"><strong style="color:'+(p.signal==='BUY'?'#4ade80':'#f87171')+';font-size:15px;letter-spacing:1px">'+p.signal+'</strong><br><span style="color:var(--mute);font-size:11px">'+Math.round(p.confidence)+'% AI Conf</span></div>'+
+       html += '<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:6px;padding:4px 10px;font-size:12px;font-family:\'Space Mono\',monospace;cursor:pointer;transition:border 0.2s" onmouseover="this.style.borderColor=\'var(--acc)\'" onmouseout="this.style.borderColor=\'var(--bdr)\'" onclick="qs(\''+p.symbol+'\')">' +
+               '<span style="color:var(--txt);margin-right:6px"><strong>'+p.symbol+'</strong></span>' +
+               '<span style="color:'+(p.signal==='BUY'?'#4ade80':'#f87171')+'"><strong>'+p.signal+'</strong></span>' +
                '</div>';
     });
-    html += '</div>';
-    var d0 = document.getElementById('d0');
-    d0.innerHTML = d0.innerHTML + '<div style="margin-top:40px;border-top:1px dashed var(--bdr);padding-top:30px">' + 
-                   '<h4 style="color:var(--acc);margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:15px;text-transform:uppercase;letter-spacing:1px">🚨 Live AI Top Picks Screener</h4>' + html + '</div>';
+    document.getElementById('screener-items').innerHTML = html;
   }).catch(function(e){
     console.log("Screener scan error", e);
+    document.getElementById('top-screener').style.display = 'none';
   });
 }
 window.onload = loadScreener;
