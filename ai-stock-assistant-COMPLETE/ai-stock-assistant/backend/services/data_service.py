@@ -94,44 +94,43 @@ def resolve_ticker(symbol: str) -> str:
     return TICKER_MAP.get(upper, upper)
 
 def format_finnhub_symbol(ticker: str) -> str:
-    """Format ticker for Finnhub (e.g., RELIANCE.NS -> RELIANCE)."""
-    if "." in ticker and not ticker.startswith("^"):
-        return ticker.split(".")[0]
+    """Format ticker for Finnhub. Keeps .NS for Indian stocks as per Finnhub docs."""
+    # If it's a NIFTY index, handle specially or leave as is
+    if ticker.startswith("^"): return ticker
+    # For common US stocks, return as is
+    # For Indian stocks, Finnhub usually uses .NS
     return ticker
 
-@retry_with_backoff(retries=2, backoff_in_seconds=1)
+@retry_with_backoff(retries=1, backoff_in_seconds=1)
 def fetch_finnhub_candles(ticker: str, days: int = 365) -> pd.DataFrame:
-    """Fetch candle data from Finnhub."""
+    """Fetch candle data from Finnhub with improved error handling."""
     if not FINNHUB_API_KEY:
-        raise ValueError("Finnhub API Key is missing")
+        print("Finnhub API Key is missing - skipping Layer 1")
+        return pd.DataFrame()
     
     ticker_fh = format_finnhub_symbol(ticker)
     end = int(time.time())
     start = end - (days * 24 * 60 * 60)
     
-    url = f"https://finnhub.io/api/v1/stock/candle?symbol={ticker_fh}&resolution=D&from={start}&to={end}&token={FINNHUB_API_KEY}"
-    r = requests.get(url, timeout=10)
-    data = r.json()
-    
-    if data.get("s") != "ok":
-        # Try once with the original ticker if it failed (for indices)
-        if ticker != ticker_fh:
-            url = f"https://finnhub.io/api/v1/stock/candle?symbol={ticker}&resolution=D&from={start}&to={end}&token={FINNHUB_API_KEY}"
-            r = requests.get(url, timeout=10)
-            data = r.json()
-            if data.get("s") != "ok":
-                return pd.DataFrame()
-        else:
-            return pd.DataFrame()
+    try:
+        url = f"https://finnhub.io/api/v1/stock/candle?symbol={ticker_fh}&resolution=D&from={start}&to={end}&token={FINNHUB_API_KEY}"
+        r = requests.get(url, timeout=10)
+        data = r.json()
         
-    df = pd.DataFrame({
-        "Open": data["o"],
-        "High": data["h"],
-        "Low": data["l"],
-        "Close": data["c"],
-        "Volume": data["v"]
-    }, index=pd.to_datetime(data["t"], unit="s"))
-    return df
+        if data.get("s") != "ok":
+            return pd.DataFrame()
+            
+        df = pd.DataFrame({
+            "Open": data["o"],
+            "High": data["h"],
+            "Low": data["l"],
+            "Close": data["c"],
+            "Volume": data["v"]
+        }, index=pd.to_datetime(data["t"], unit="s"))
+        return df
+    except Exception as e:
+        print(f"Finnhub candle fetch failed: {e}")
+        return pd.DataFrame()
 
 def fetch_stock_data(
     symbol: str,

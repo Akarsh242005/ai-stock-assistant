@@ -272,8 +272,14 @@ function go(retryCount = 0){
   dsp('d0','none');dsp('d-load','flex');dsp('d-main','none');dsp('d-err','none');
   dsp('ta0','block');dsp('ta-main','none');dsp('fc0','block');dsp('fc-main','none');
   setBtn(false);
-  document.getElementById('lmsg').textContent=(retryCount > 0 ? 'Retrying ('+retryCount+'/3)...' : 'Analyzing '+raw.toUpperCase()+'...');
+  document.getElementById('lmsg').textContent=(retryCount > 0 ? 'Retrying ('+retryCount+'/3)...' : '1. Fetching real-time market data...');
   dsp('d-load','block');
+  
+  // Progress simulation for better UX during LSTM training
+  let lmsg = document.getElementById('lmsg');
+  setTimeout(() => { if(lmsg.textContent.includes('1.')) lmsg.textContent = '2. Engineering technical indicators...'; }, 1500);
+  setTimeout(() => { if(lmsg.textContent.includes('2.')) lmsg.textContent = '3. Training deep learning models...'; }, 3000);
+  setTimeout(() => { if(lmsg.textContent.includes('3.')) lmsg.textContent = '4. Calculating expert ensemble verdict...'; }, 6000);
   
   Promise.all([
     fetch(BACKEND_URL + '/api/combined/' + tk).then(r => {

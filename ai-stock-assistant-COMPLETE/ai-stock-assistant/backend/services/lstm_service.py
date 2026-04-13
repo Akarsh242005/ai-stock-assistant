@@ -106,6 +106,11 @@ def train_and_predict(
     model_path = os.path.join(MODEL_DIR, f"lstm_mv_{symbol.replace('.', '_')}.h5")
     _should_train = False
 
+    # Short-circuit if not enough data to train effectively
+    if len(X_train) < WINDOW_SIZE:
+        print(f"Data too sparse for {symbol} ({len(X_train)} samples). Using fallback.")
+        return _fallback_prediction(df, symbol)
+
     if use_cache and os.path.exists(model_path):
         try:
             model = load_model(model_path)
@@ -118,10 +123,12 @@ def train_and_predict(
         _should_train = True
 
     if _should_train:
-        early_stop = EarlyStopping(monitor="val_loss", patience=3, restore_best_weights=True)
+        # Reduced epochs for faster live analysis
+        train_epochs = min(epochs, 5) 
+        early_stop = EarlyStopping(monitor="val_loss", patience=2, restore_best_weights=True)
         model.fit(
             X_train, y_train,
-            epochs=epochs,
+            epochs=train_epochs,
             batch_size=32,
             validation_split=0.1,
             callbacks=[early_stop],
