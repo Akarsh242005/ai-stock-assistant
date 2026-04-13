@@ -81,6 +81,12 @@ canvas{width:100% !important;height:100% !important}
     <button class="gbtn" id="gbtn" onclick="go()">Analyze</button>
   </div>
   
+  <!-- PERMANENT LIVE SCREENER -->
+  <div id="top-screener" style="background:var(--s);border-bottom:1px solid var(--bdr);padding:10px 16px;display:none;align-items:center;gap:12px;overflow-x:auto;white-space:nowrap">
+    <div style="font-size:11px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:1px;flex-shrink:0"><span class="spin" style="width:10px;height:10px;border-width:1px;margin-right:6px;vertical-align:middle;display:inline-block"></span> Live AI Picks:</div>
+    <div id="screener-items" style="display:flex;gap:12px"></div>
+  </div>
+
   <div class="tabs">
     <div class="tab on" id="t-dash" onclick="swTab('dash',this)">Terminal</div>
     <div class="tab" id="t-ta" onclick="swTab('ta',this)">Indicators</div>
@@ -156,7 +162,7 @@ canvas{width:100% !important;height:100% !important}
   <div id="p-cv" class="pane">
     <div class="g2">
       <div class="card">
-        <div class="dz" id="dz" onclick="document.getElementById('fi').click()">
+     <div class="dz" id="dz" onclick="document.getElementById('fi').click()">
           <div style="font-size:40px;margin-bottom:16px">📷</div>
           <h3>Scan Chart Image</h3>
           <p style="color:var(--mute);margin-bottom:20px">Upload screenshot from Zerodha, TradingView, etc.</p>
@@ -175,7 +181,7 @@ canvas{width:100% !important;height:100% !important}
 
 <script>
 'use strict';
-const API = 'https://ai-stock-assistant-2.onrender.com/api';
+const API = 'http://localhost:8000/api';
 var D={},CH={};
 
 const SYMS = {'RELIANCE':'RELIANCE.NS','TCS':'TCS.NS','IREDA':'IREDA.NS','AAPL':'AAPL','TSLA':'TSLA','NVDA':'NVDA','NIFTY':'^NSEI'};
@@ -189,6 +195,27 @@ function swTab(id,el){
   el?.classList.add('on') || document.getElementById('t-'+id).classList.add('on');
 }
 function qs(s){document.getElementById('sym').value=s;go();}
+
+async function loadScreener(){
+  let sDiv = document.getElementById('top-screener');
+  if(sDiv) sDiv.style.display = 'flex';
+  try {
+    let r = await fetch(`${API}/screener`);
+    let d = await r.json();
+    if(d.picks && d.picks.length){
+      let h = '';
+      d.picks.forEach(p => {
+        h += `<div style="background:var(--s);border:1px solid var(--bdr);border-radius:100px;padding:6px 14px;font-size:12px;font-family:'Space Mono',monospace;cursor:pointer;transition:all 0.2s" class="sc-chip" onmouseover="this.style.borderColor='var(--acc)'" onmouseout="this.style.borderColor='var(--bdr)'" onclick="qs('${p.symbol}')">
+                <span style="color:var(--txt);margin-right:6px"><strong>${p.symbol}</strong></span>
+                <span style="color:${p.signal==='BUY'?'#4ade80':'#f87171'}"><strong>${p.signal}</strong></span>
+              </div>`;
+      });
+      document.getElementById('screener-items').innerHTML = h;
+    } else { if(sDiv) sDiv.style.display = 'none'; }
+  } catch(e) { console.log('screener fail', e); if(sDiv) sDiv.style.display = 'none'; }
+}
+
+window.onload = loadScreener;
 
 async function go(){
   var raw=document.getElementById('sym').value.trim();

@@ -20,7 +20,10 @@ import os
 try:
     from .. import config
 except (ImportError, ValueError):
-    import backend.config as config
+    try:
+        import backend.config as config
+    except ImportError:
+        import config
 
 # User-Agent list for rotation
 _USER_AGENTS = [

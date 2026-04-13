@@ -84,6 +84,14 @@ input,button{font-family:inherit}
 canvas{max-width:100%}
 @media(max-width:800px){.g2{grid-template-columns:1fr}.g4{grid-template-columns:1fr 1fr}.pgrid{grid-template-columns:1fr 1fr}}
 @media(max-width:500px){.g4{grid-template-columns:1fr}}
+.skel{background:#1e293b;background:linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.skel-card{height:100px;margin-bottom:10px}
+.skel-chart{height:200px}
+.ds-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:100px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-left:auto}
+.ds-finnhub{background:rgba(34,211,238,.1);color:var(--acc);border:1px solid rgba(34,211,238,.3)}
+.ds-yahoo{background:rgba(202,138,4,.1);color:var(--y);border:1px solid rgba(202,138,4,.3)}
+footer{padding:24px;text-align:center;border-top:1px solid var(--bdr);margin-top:auto;color:var(--faint);font-size:11px}
 </style>
 </head>
 <body>
@@ -130,9 +138,25 @@ canvas{max-width:100%}
       <div class="qc" onclick="qs('NVDA')">NVDA</div>
     </div>
   </div>
-  <div id="d-load" class="loading" style="display:none"><div class="spin"></div><span id="lmsg">Fetching live data...</span></div>
+  <div id="d-load" style="display:none">
+    <div class="g4">
+      <div class="skel skel-card"></div>
+      <div class="skel skel-card"></div>
+      <div class="skel skel-card"></div>
+      <div class="skel skel-card"></div>
+    </div>
+    <div class="g2">
+      <div class="skel skel-chart"></div>
+      <div class="skel skel-chart"></div>
+    </div>
+    <div class="loading"><div class="spin"></div><span id="lmsg">Fetching live data...</span></div>
+  </div>
   <div id="d-err" class="err" style="display:none"></div>
   <div id="d-main" style="display:none">
+    <div style="display:flex;align-items:center;margin-bottom:14px">
+      <div class="sec" style="margin-bottom:0;border-bottom:none">Market Overview</div>
+      <div id="ds-badge-cont"></div>
+    </div>
     <div class="g4" id="scards"></div>
     <div class="g2">
       <div class="card"><div class="sec">Price history — 6 months</div><div style="position:relative;height:190px"><canvas id="c-px"></canvas></div></div>
@@ -202,6 +226,11 @@ canvas{max-width:100%}
     </div>
   </div>
 </div>
+<footer>
+  <div style="margin-bottom:8px;font-weight:600;color:var(--mute)">AI StockVision Pro — Financial Analysis Engine</div>
+  <div>Live prices from Finnhub (primary) + Yahoo Finance (fallback) — fully real, no fake data</div>
+  <div style="margin-top:12px;opacity:.5">Production Grade Systems &copy; 2026 AI StockVision. Not financial advice.</div>
+</footer>
 </div>
 
 <script>
@@ -234,7 +263,7 @@ function qs(s){document.getElementById('sym').value=s;go();}
 function dsp(id,v){var e=document.getElementById(id);if(e)e.style.display=v;}
 function setBtn(on){var b=document.getElementById('gbtn');b.disabled=!on;b.textContent=on?'▶ Analyze Live':'Loading...';}
 
-const BACKEND_URL = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://ai-stock-assistant-2.onrender.com';
+const BACKEND_URL = (window.location.hostname === 'localhost' || window.location.hostname === '' || window.location.hostname === '127.0.0.1') ? 'http://localhost:8000' : 'https://ai-stock-assistant-2.onrender.com';
 
 function go(retryCount = 0){
   var raw=document.getElementById('sym').value.trim();
@@ -243,7 +272,8 @@ function go(retryCount = 0){
   dsp('d0','none');dsp('d-load','flex');dsp('d-main','none');dsp('d-err','none');
   dsp('ta0','block');dsp('ta-main','none');dsp('fc0','block');dsp('fc-main','none');
   setBtn(false);
-  document.getElementById('lmsg').textContent=(retryCount > 0 ? 'Retrying (Attempt '+retryCount+')...' : 'Fetching AI analysis for '+raw.toUpperCase()+'...');
+  document.getElementById('lmsg').textContent=(retryCount > 0 ? 'Retrying ('+retryCount+'/3)...' : 'Analyzing '+raw.toUpperCase()+'...');
+  dsp('d-load','block');
   
   Promise.all([
     fetch(BACKEND_URL + '/api/combined/' + tk).then(r => {
@@ -261,8 +291,9 @@ function go(retryCount = 0){
     parseCombinedData(res, raw.toUpperCase());
   })
   .catch(function(e) {
-    if (e.message === "Retry" && retryCount < 2) {
-      setTimeout(() => go(retryCount + 1), 3000);
+    if ((e.message === "Retry" || e.message === "Failed to fetch") && retryCount < 3) {
+      var nextDelay = (retryCount + 1) * 2000;
+      setTimeout(() => go(retryCount + 1), nextDelay);
       return;
     }
     dsp('d-load','none');
@@ -295,6 +326,9 @@ function parseCombinedData(res, disp) {
     forecast: forecast
   };
   
+  var src = res.source || 'Yahoo';
+  document.getElementById('ds-badge-cont').innerHTML = '<div class="ds-badge ds-'+src.toLowerCase().split(' ')[0]+'">Data: '+src+'</div>';
+
   dsp('d-load','none'); dsp('d-main','block');
   dsp('ta0','none'); dsp('ta-main','block');
   dsp('fc0','none'); dsp('fc-main','block');
@@ -302,10 +336,11 @@ function parseCombinedData(res, disp) {
 }
 
 function showErr(sym,msg){
-  dsp('d0','none');dsp('d-main','none');
+  dsp('d0','none');dsp('d-main','none');dsp('d-load','none');
   var el=document.getElementById('d-err');el.style.display='block';
-  el.innerHTML='<strong>⚠ Could not load '+sym+'</strong><br>'+(msg||'Backend Error')+
-    '<br><br>If the error mentions Rate Limits, Yahoo Finance may be busy. Please try again in 5 minutes.';
+  el.innerHTML='<div style="font-weight:700;margin-bottom:10px">⚠ Market Data Unavailable for '+sym+'</div>'+
+    '<div style="margin-bottom:14px">'+(msg || 'The connection timed out while fetching live price data.')+'</div>'+
+    '<button class="gbtn" style="padding:8px 16px;font-size:11px" onclick="go()">Try Again Now</button>';
 }
 
 function fmt(n) {
@@ -476,7 +511,7 @@ function cvProcess(file){
       '<div class="opts" style="margin-top:10px">'+(res.support_resistance||'')+'</div>'+
       '<ul class="reasons" style="margin-top:10px">'+(res.reasons||[]).map(r=>'<li>'+r+'</li>').join('')+'</ul></div>';
   }).catch(err=>{
-    document.getElementById('lmsg').innerHTML = '<span style="color:red">Backend Error: ' + e.message + '</span><br><small>If the error mentions Rate Limits, Yahoo Finance may be busy. Please try again in 5 minutes.</small>';
+    document.getElementById('cv-out').innerHTML = '<div class="err"><strong>⚠ Vision Analysis Failed</strong><br>' + err.message + '<br><br>Ensure you searched for a stock first and have a stable connection.</div>';
   });
 }
 function pg(cls,items){

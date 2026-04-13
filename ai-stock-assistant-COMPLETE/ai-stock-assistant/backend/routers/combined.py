@@ -17,9 +17,13 @@ def get_combined_analysis(symbol: str, period: str = Query("2y")):
     """
     try:
         # These will be cached after the first call inside data_service
-        df = fetch_stock_data(symbol, period=period)
+        df, source = fetch_stock_data(symbol, period=period)
         info = fetch_stock_info(symbol)
         
+        # Ensure info has the source if it wasn't already set
+        if "source" not in info:
+            info["source"] = source
+
         # 1. Technical Analysis (Fastest, run first)
         analysis = generate_signal(df)
         
@@ -79,6 +83,7 @@ def get_combined_analysis(symbol: str, period: str = Query("2y")):
         
         return sanitize_for_json({
             "symbol": symbol.upper(),
+            "source": source,
             "info": info,
             "analysis": analysis,
             "ensemble": ensemble,

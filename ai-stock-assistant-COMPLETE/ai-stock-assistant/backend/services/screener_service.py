@@ -12,7 +12,7 @@ def scan_single_stock(symbol: str) -> dict:
     """Scan a single stock and return actionable intelligence."""
     try:
         # 3 months of data is enough for generating a fast technical signal
-        df = fetch_stock_data(symbol, period="3mo", interval="1d")
+        df, _ = fetch_stock_data(symbol, period="3mo", interval="1d")
         analysis = generate_signal(df)
         return {
             "symbol": symbol,
