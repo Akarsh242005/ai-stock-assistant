@@ -92,11 +92,30 @@ TICKER_MAP = {
     "IREDA":     "IREDA.NS",
     "ZOMATO":    "ZOMATO.NS",
     "JIOFIN":    "JIOFIN.NS",
+    "TATSILV":   "TATSILV.NS",
+    "TATASILV":  "TATSILV.NS",
+    "TATA SILV": "TATSILV.NS",
+    "JPPOWER":   "JPPOWER.NS",
     "AAPL":      "AAPL",
     "MSFT":      "MSFT",
     "GOOGL":     "GOOGL",
     "TSLA":      "TSLA",
     "NVDA":      "NVDA",
+}
+
+# ─── Price Anchors for Realistic Simulations ──────────────────
+# Ballpark 2026 prices for popular symbols to seed 'Meeting Mode' simulations
+PRICE_ANCHORS = {
+    "IREDA.NS":    172.50,
+    "TATSILV.NS":  24.10,
+    "JPPOWER.NS":  18.40,
+    "JIOFIN.NS":   354.20,
+    "ZOMATO.NS":   188.00,
+    "RELIANCE.NS": 2940.00,
+    "TCS.NS":      3850.00,
+    "AAPL":        178.50,
+    "NVDA":        890.00,
+    "TSLA":        165.00,
 }
 
 # ─── Simple In-Memory Cache (TTL) ─────────────────────────
@@ -148,20 +167,39 @@ def fetch_finnhub_candles(ticker: str, days: int = 365) -> pd.DataFrame:
         print(f"Finnhub candle fetch failed: {e}")
         return pd.DataFrame()
 
-# --- Layer 4: Resilient Google Finance (Emergency Scraper) ---
+# --- Layer 4: Universal Google Scraper (Pro Fallback) ---
 def fetch_google_finance_price(ticker: str) -> Optional[float]:
-    """Scrapes the current price from Google Search results as a lightweight fallback."""
-    try:
-        query = f"google finance {ticker}"
-        url = f"https://www.google.com/search?q={query}"
-        r = requests.get(url, headers=get_random_headers(), timeout=5)
-        # Crude but effective regex to find price-like strings in GFinance cards
-        import re
-        match = re.search(r'>(\d+,\d+\.\d+|\d+\.\d+)</span>', r.text)
-        if match:
-             val = match.group(1).replace(",", "")
-             return float(val)
-    except: pass
+    """
+    Highly resilient scraper that tries multiple Google Search strategies
+    to find live prices for virtually any global share.
+    """
+    search_queries = [
+        f"google finance {ticker}",
+        f"{ticker} share price",
+        f"NSE {ticker.replace('.NS', '')} price" if ".NS" in ticker else f"{ticker} stock price"
+    ]
+    
+    import re
+    # Regular expression to extract price from Google Finance snippets
+    # Matches common formats like "1,540.50", "24.10", "172.50"
+    price_regex = r'>(\d{1,3}(?:,\d{3})*(?:\.\d+)|(?:\d+)(?:\.\d+))</span>'
+
+    for query in search_queries:
+        try:
+            url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
+            headers = get_random_headers()
+            headers["Referer"] = "https://www.google.com/"
+            
+            r = requests.get(url, headers=headers, timeout=5)
+            if r.status_code == 200:
+                match = re.search(price_regex, r.text)
+                if match:
+                    price_str = match.group(1).replace(",", "")
+                    price = float(price_str)
+                    if price > 0:
+                        return price
+        except:
+            continue
     return None
 
 # --- Layer 5: Mission-Critical Simulation Layer (The 'Meeting Mode' Fail-Safe) ---
@@ -181,7 +219,9 @@ def generate_simulated_data(ticker: str, days: int = 500) -> pd.DataFrame:
     # Use Business Days to match market behavior and model expectations
     dates = pd.date_range(end=datetime.now(), periods=days, freq='B').tz_localize(None)
     
-    base_price = 100 + (seed % 4900)
+    # Use anchor price if available, otherwise fallback to seed-based base_price
+    base_price = PRICE_ANCHORS.get(ticker, 100 + (seed % 4900))
+    
     returns = np.random.normal(loc=0.0005, scale=0.02, size=days)
     price_series = base_price * (1 + returns).cumprod()
     
