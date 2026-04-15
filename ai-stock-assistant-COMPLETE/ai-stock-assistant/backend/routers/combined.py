@@ -36,10 +36,24 @@ def get_combined_analysis(symbol: str, period: str = Query("2y")):
             prophet_future = executor.submit(forecast_with_prophet, df, symbol)
             arima_future = executor.submit(forecast_with_arima, df, symbol)
             
-            # Wait for all to complete
-            lstm_result = lstm_future.result()
-            prophet_result = prophet_future.result()
-            arima_result = arima_future.result()
+            # Wait for all to complete with error isolation
+            try: lstm_result = lstm_future.result()
+            except Exception as e: 
+                print(f"LSTM Error: {e}")
+                from services.lstm_service import _fallback_prediction
+                lstm_result = _fallback_prediction(df, symbol)
+                
+            try: prophet_result = prophet_future.result()
+            except Exception as e: 
+                print(f"Prophet Error: {e}")
+                from services.prophet_service import _fallback_forecast
+                prophet_result = _fallback_forecast(df, symbol)
+                
+            try: arima_result = arima_future.result()
+            except Exception as e: 
+                print(f"ARIMA Error: {e}")
+                from services.arima_service import _fallback_arima
+                arima_result = _fallback_arima(df, symbol)
             
         # --- EXPERT FEATURE: Backtest Scoring & Ensemble Verdict ---
         def calc_accuracy(mape):
