@@ -505,7 +505,6 @@ function doDrop(e){e.preventDefault();e.stopPropagation();document.getElementByI
 function doFile(e){var f=e.target.files[0];if(f)cvProcess(f);e.target.value='';}
 function cvProcess(file){
   if (!file.type.startsWith('image/')) { alert('Upload an image file'); return; }
-  var BACKEND_URL = 'http://localhost:8000';
   document.getElementById('cv-out').innerHTML = '<div class="empty"><h3>Analyzing chart with AI...</h3></div>';
   var fd = new FormData(); fd.append('file', file);
   fetch(BACKEND_URL + '/api/chart/analyze', { method: 'POST', body: fd }).then(r=>r.json()).then(res=>{

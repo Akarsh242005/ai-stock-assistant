@@ -75,12 +75,28 @@ TICKER_MAP = {
     "RELIANCE":  "RELIANCE.NS",
     "TCS":       "TCS.NS",
     "INFOSYS":   "INFY.NS",
+    "INFY":      "INFY.NS",
     "HDFC":      "HDFCBANK.NS",
+    "HDFCBANK":  "HDFCBANK.NS",
     "WIPRO":     "WIPRO.NS",
+    "ICICIBANK": "ICICIBANK.NS",
+    "SBIN":      "SBIN.NS",
+    "AXISBANK":  "AXISBANK.NS",
+    "KOTAKBANK": "KOTAKBANK.NS",
+    "TATAMOTORS":"TATAMOTORS.NS",
+    "TATAPOWER": "TATAPOWER.NS",
+    "TATASTEEL": "TATASTEEL.NS",
+    "ADANIENT":  "ADANIENT.NS",
+    "BAJFINANCE":"BAJFINANCE.NS",
+    "IRFC":      "IRFC.NS",
+    "IREDA":     "IREDA.NS",
+    "ZOMATO":    "ZOMATO.NS",
+    "JIOFIN":    "JIOFIN.NS",
     "AAPL":      "AAPL",
     "MSFT":      "MSFT",
     "GOOGL":     "GOOGL",
     "TSLA":      "TSLA",
+    "NVDA":      "NVDA",
 }
 
 # ─── Simple In-Memory Cache (TTL) ─────────────────────────
@@ -163,8 +179,13 @@ def fetch_stock_data(
     # --- Layer 2: YahooQuery (Fallback 1) ---
     if df is None or df.empty:
         try:
-            yq = YQTicker(ticker, session=_SESSION)
+            # Isolated session with fresh headers for each request to avoid blocking
+            session = requests.Session()
+            session.headers.update(get_random_headers())
+            
+            yq = YQTicker(ticker, session=session)
             history = yq.history(period=period, interval=interval)
+            
             if hasattr(history, 'empty') and not history.empty:
                 if isinstance(history.index, pd.MultiIndex):
                     try:
@@ -180,7 +201,8 @@ def fetch_stock_data(
     # --- Layer 3: yfinance (Fallback 2) ---
     if df is None or df.empty:
         try:
-            df = yf.download(ticker, period=period, interval=interval, progress=False)
+            # We don't use shared session here as yfinance is often more stable without it on cloud
+            df = yf.download(ticker, period=period, interval=interval, progress=False, timeout=15)
             if df is not None and not df.empty:
                 source = "Yahoo (Ref 2)"
         except Exception as e:

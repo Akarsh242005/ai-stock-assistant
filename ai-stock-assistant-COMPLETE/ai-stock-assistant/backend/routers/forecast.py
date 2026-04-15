@@ -1,5 +1,16 @@
 from utils import sanitize_for_json
-'\n============================================================\nForecast Router — /api/forecast\n============================================================\nEndpoints:\n  GET  /api/forecast/{symbol}         — all 3 model forecasts\n  GET  /api/forecast/{symbol}/lstm    — LSTM only\n  GET  /api/forecast/{symbol}/prophet — Prophet only\n  GET  /api/forecast/{symbol}/arima   — ARIMA only\n  GET  /api/forecast/{symbol}/compare — side-by-side metrics\n============================================================\n'
+"""
+============================================================
+Forecast Router — /api/forecast
+============================================================
+Endpoints:
+  GET  /api/forecast/{symbol}         — all 3 model forecasts
+  GET  /api/forecast/{symbol}/lstm    — LSTM only
+  GET  /api/forecast/{symbol}/prophet — Prophet only
+  GET  /api/forecast/{symbol}/arima   — ARIMA only
+  GET  /api/forecast/{symbol}/compare — side-by-side metrics
+============================================================
+"""
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 import traceback
@@ -16,7 +27,7 @@ def get_all_forecasts(symbol: str, period: str=Query('2y', description='Historic
     Useful for the main dashboard view.
     """
     try:
-        df = fetch_stock_data(symbol, period=period)
+        df, _ = fetch_stock_data(symbol, period=period)
         info = fetch_stock_info(symbol)
         lstm_result = train_and_predict(df, symbol, epochs=15)
         prophet_result = forecast_with_prophet(df, symbol)
@@ -31,7 +42,7 @@ def get_all_forecasts(symbol: str, period: str=Query('2y', description='Historic
 def get_lstm_forecast(symbol: str, period: str=Query('2y')):
     """LSTM deep learning forecast."""
     try:
-        df = fetch_stock_data(symbol, period=period)
+        df, _ = fetch_stock_data(symbol, period=period)
         return sanitize_for_json({'symbol': symbol.upper(), **train_and_predict(df, symbol)})
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -40,7 +51,7 @@ def get_lstm_forecast(symbol: str, period: str=Query('2y')):
 def get_prophet_forecast(symbol: str, period: str=Query('2y')):
     """Facebook Prophet forecast."""
     try:
-        df = fetch_stock_data(symbol, period=period)
+        df, _ = fetch_stock_data(symbol, period=period)
         return sanitize_for_json({'symbol': symbol.upper(), **forecast_with_prophet(df, symbol)})
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -49,7 +60,7 @@ def get_prophet_forecast(symbol: str, period: str=Query('2y')):
 def get_arima_forecast(symbol: str, period: str=Query('2y')):
     """ARIMA statistical forecast."""
     try:
-        df = fetch_stock_data(symbol, period=period)
+        df, _ = fetch_stock_data(symbol, period=period)
         return sanitize_for_json({'symbol': symbol.upper(), **forecast_with_arima(df, symbol)})
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -58,7 +69,7 @@ def get_arima_forecast(symbol: str, period: str=Query('2y')):
 def compare_models(symbol: str, period: str=Query('2y')):
     """Side-by-side model comparison with metrics table."""
     try:
-        df = fetch_stock_data(symbol, period=period)
+        df, _ = fetch_stock_data(symbol, period=period)
         lstm_r = train_and_predict(df, symbol)
         prophet_r = forecast_with_prophet(df, symbol)
         arima_r = forecast_with_arima(df, symbol)
