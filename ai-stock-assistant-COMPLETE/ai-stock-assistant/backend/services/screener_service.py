@@ -4,8 +4,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 # Pre-defined hot watchlist for the screener to check (mixed IN and US markets)
 HOT_WATCHLIST = [
-    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "SBIN.NS",
-    "AAPL", "MSFT", "NVDA", "AMZN", "TSLA"
+    "IREDA.NS", "TATSILV.NS", "JPPOWER.NS", "JIOFIN.NS", "ZOMATO.NS",
+    "RELIANCE.NS", "TCS.NS", "INFY.NS", "SBIN.NS", "HDFCBANK.NS",
+    "AAPL", "MSFT", "NVDA", "TSLA", "META"
 ]
 
 def scan_single_stock(symbol: str) -> dict:

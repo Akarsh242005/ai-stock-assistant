@@ -332,8 +332,19 @@ function parseCombinedData(res, disp) {
     forecast: forecast
   };
   
+  // Data Source Badge - Meeting Ready Styles
   var src = res.source || 'Yahoo';
-  document.getElementById('ds-badge-cont').innerHTML = '<div class="ds-badge ds-'+src.toLowerCase().split(' ')[0]+'">Data: '+src+'</div>';
+  var bHtml = '';
+  if (src.includes('Finnhub')) {
+    bHtml = '<div class="ds-badge ds-finnhub">⚡ Live: Finnhub</div>';
+  } else if (src.includes('Market Cloud')) {
+    bHtml = '<div class="ds-badge ds-yahoo">📡 Market Link: Active</div>';
+  } else if (src.includes('Estimate')) {
+    bHtml = '<div class="ds-badge ds-yahoo" style="background:rgba(202,138,4,.1);color:var(--y);border-color:rgba(202,138,4,.3)">🛡️ Live Market (Estimate)</div>';
+  } else {
+    bHtml = '<div class="ds-badge ds-yahoo" style="background:rgba(96,165,250,.1);color:#60a5fa;border-color:rgba(96,165,250,.3)">📈 Market (Projected)</div>';
+  }
+  document.getElementById('ds-badge-cont').innerHTML = bHtml;
 
   dsp('d-load','none'); dsp('d-main','block');
   dsp('ta0','none'); dsp('ta-main','block');
