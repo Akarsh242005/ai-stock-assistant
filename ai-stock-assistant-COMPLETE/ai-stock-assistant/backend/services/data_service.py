@@ -126,7 +126,8 @@ CACHE_TTL = 60  # 1 minute for live prices
 def resolve_ticker(symbol: str) -> str:
     """Convert friendly name to internal ticker symbol."""
     upper = symbol.upper()
-    return TICKER_MAP.get(upper, upper)
+    base_symbol = upper.replace(".NS", "")
+    return TICKER_MAP.get(base_symbol, upper)
 
 def format_finnhub_symbol(ticker: str) -> str:
     """Format ticker for Finnhub. Keeps .NS for Indian stocks as per Finnhub docs."""
